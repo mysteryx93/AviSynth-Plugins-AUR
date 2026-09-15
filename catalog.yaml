@@ -102,8 +102,7 @@ packages:
     author: mysteryx93
     repo: https://github.com/mysteryx93/xClean
     license: GPL-3.0-only
-    version_from: manual
-    version: "0.10"
+    version_from: auto
     pkgdesc: "AviSynth xClean 3-pass denoiser (AVSI)"
     depends: [avisynthplus]
     files:

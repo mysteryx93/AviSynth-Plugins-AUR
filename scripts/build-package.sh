@@ -3,16 +3,17 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <package-id> <distro> <version>" >&2
+  echo "Usage: $0 <package-id> <distro> <version> [git_ref]" >&2
   echo "  distro: arch | ubuntu22.04 | any" >&2
   exit 2
 }
 
-[[ $# -eq 3 ]] || usage
+[[ $# -eq 3 || $# -eq 4 ]] || usage
 
 ID=$1
 DISTRO=$2
 VERSION=$3
+GIT_REF=${4:-}
 [[ "$ID" =~ ^[a-z0-9][a-z0-9-]*$ ]] || usage
 [[ "$DISTRO" =~ ^(arch|ubuntu22\.04|any)$ ]] || usage
 [[ "$VERSION" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+]*$ ]] || usage
@@ -177,15 +178,6 @@ clone_upstream() {
   if [[ "$SUBMODULES" == "True" || "$SUBMODULES" == "true" ]]; then
     extra+=(--recurse-submodules --shallow-submodules)
   fi
-  if [[ "$KIND" == "script" ]] && [[ "$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("version_from"))' <<<"$META")" == "manual" ]]; then
-    git clone "${extra[@]}" "$REPO" "$SRC"
-    local commit
-    # Same pin as the PKGBUILD; catalog version alone is not a git ref.
-    commit=$(sed -n "s/^_commit='\([a-f0-9]*\)'$/\1/p" "$ROOT/packages/$AUR/PKGBUILD")
-    [[ "$commit" =~ ^[a-f0-9]{40}$ ]] || { echo "Manual scripts require a pinned _commit in PKGBUILD" >&2; exit 1; }
-    git -C "$SRC" checkout --detach "$commit"
-    return
-  fi
   # git_branch is the tree to clone when GitHub's default is not the Linux source.
   if [[ -n "$GIT_BRANCH" ]]; then
     git clone "${extra[@]}" --branch "$GIT_BRANCH" "$REPO" "$SRC"
@@ -195,13 +187,24 @@ clone_upstream() {
   git -C "$SRC" fetch --tags --force
   git -C "$SRC" fetch origin "refs/tags/${VERSION}:refs/tags/${VERSION}" 2>/dev/null || true
   git -C "$SRC" fetch origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}" 2>/dev/null || true
-  if git -C "$SRC" checkout --detach "$VERSION"; then
+  local pin=${GIT_REF:-$VERSION}
+  if [[ -n "$pin" ]] && git -C "$SRC" checkout --detach "$pin"; then
     return
   fi
   if git -C "$SRC" checkout --detach "v${VERSION}"; then
     return
   fi
-  echo "No git ref $VERSION (or v$VERSION) in $REPO${GIT_BRANCH:+ (git_branch $GIT_BRANCH)}" >&2
+  # rYYYYMMDD.<sha7> from version_from: auto when there is no release/tag.
+  if [[ "$VERSION" =~ ^r[0-9]{8}\.([0-9a-f]{7,})$ ]] && git -C "$SRC" checkout --detach "${BASH_REMATCH[1]}"; then
+    return
+  fi
+  # Build --from-pkgbuild: pkgver is not a git ref; scripts pin _commit.
+  local commit
+  commit=$(sed -n "s/^_commit='\([a-f0-9]*\)'$/\1/p" "$ROOT/packages/$AUR/PKGBUILD")
+  if [[ "$commit" =~ ^[a-f0-9]{7,40}$ ]] && git -C "$SRC" checkout --detach "$commit"; then
+    return
+  fi
+  echo "No git ref $pin (or v$VERSION) in $REPO${GIT_BRANCH:+ (git_branch $GIT_BRANCH)}" >&2
   exit 1
 }
 

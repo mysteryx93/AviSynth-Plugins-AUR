@@ -120,13 +120,13 @@ jobs:
           docker run --rm \
             -v "$PWD":/work -w /work \
             archlinux:base-devel \
-            bash -lc "bash scripts/build-package.sh '${{ matrix.id }}' arch '${{ matrix.version }}'"
+            bash -lc "bash scripts/build-package.sh '${{ matrix.id }}' arch '${{ matrix.version }}' '${{ matrix.git_ref }}'"
 
       - name: Build (Ubuntu / portable)
         if: matrix.distro != 'arch'
         run: |
           set -euo pipefail
-          scripts/build-package.sh '${{ matrix.id }}' '${{ matrix.distro }}' '${{ matrix.version }}'
+          scripts/build-package.sh '${{ matrix.id }}' '${{ matrix.distro }}' '${{ matrix.version }}' '${{ matrix.git_ref }}'
 
       - uses: actions/upload-artifact@v4
         with:
@@ -278,7 +278,7 @@ jobs:
           PKGREL: ${{ github.event.inputs.pkgrel || '1' }}
         run: |
           set -euo pipefail
-          scripts/bump-pkgver.sh "packages/${{ matrix.aur }}/PKGBUILD" "${{ matrix.version }}" "$PKGREL"
+          scripts/bump-pkgver.sh "packages/${{ matrix.aur }}/PKGBUILD" "${{ matrix.version }}" "$PKGREL" "${{ matrix.git_ref }}"
 
       - name: Publish AUR package
         uses: KSXGitHub/github-actions-deploy-aur@v4.2.0

@@ -29,12 +29,12 @@ Author slug when implementations differ. No `conflicts`/`provides` against an ex
 ## Checklist
 
 1. Copy `templates/<kind>.PKGBUILD` → `packages/<aur>/PKGBUILD`.
-2. Catalog row: `id`, `aur`, `kind`, `host`, `author`, `repo`, `license`, `version_from` (`release` / `tag` / `manual` + `version`), plus `build`+`collect` and/or `files`.
+2. Catalog row: `id`, `aur`, `kind`, `host`, `author`, `repo`, `license`, `version_from` (`release` / `tag` / `auto` / `manual` + `version`), plus `build`+`collect` and/or `files`. Scripts: `auto` (Release, else numeric tag, else `rYYYYMMDD.<sha>` on `git_branch` or default).
 3. Dual-host (AviSynth + VapourSynth) = two ids, two PKGBUILDs. Heavy (RIFE) = source + `-bin`.
 4. `files[]` — `src` in the clone, optional `dest`. `.so` / `.avsi` / `.py` go in `bin/` (the install payload; mixed is fine). `LICENSE` stays at the root. `install.txt` is the readme.
 5. `python3 scripts/catalog.py --packages <id> matrix-build --from-pkgbuild`, then GitHub **Build**. Maintainer **Publish**.
 
-Do not vendor upstream. Keep `_commit`, catalog `version`, and `pkgver` in sync for `version_from: manual`.
+Do not vendor upstream. `version_from: manual` still needs `_commit`, catalog `version`, and `pkgver` in sync. `auto` updates AUR `_commit` on Publish.
 
 ## CI fields
 

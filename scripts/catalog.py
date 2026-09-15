@@ -117,7 +117,7 @@ def github_slug(repo_url: str) -> str:
     return parts[1]
 
 
-def http_json(url: str, token: str | None) -> Any:
+def http_json(url: str, token: str | None, missing_ok: bool = False) -> Any:
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "AviSynth-Plugins-AUR"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -126,6 +126,8 @@ def http_json(url: str, token: str | None) -> Any:
         with urlopen(req, timeout=30) as resp:
             return json.load(resp)
     except HTTPError as exc:
+        if missing_ok and exc.code == 404:
+            return None
         raise SystemExit(f"API {url} failed: HTTP {exc.code}") from exc
     except URLError as exc:
         raise SystemExit(f"API {url} failed: {exc.reason}") from exc
@@ -167,29 +169,69 @@ def latest_numeric_tag(tags: list[dict[str, Any]]) -> str | None:
     return ranked[-1][1]
 
 
-def resolve_upstream_version(pkg: dict[str, Any], token: str | None) -> str:
+def commit_sha(slug: str, ref: str, token: str | None) -> str:
+    data = http_json(f"https://api.github.com/repos/{slug}/commits/{ref}", token)
+    sha = data.get("sha") or ""
+    if not sha:
+        raise SystemExit(f"{slug}: no sha for {ref}")
+    return sha
+
+
+def default_branch(slug: str, token: str | None) -> str:
+    data = http_json(f"https://api.github.com/repos/{slug}", token)
+    return str(data.get("default_branch") or "master")
+
+
+def head_version(slug: str, branch: str, token: str | None) -> tuple[str, str]:
+    data = http_json(
+        f"https://api.github.com/repos/{slug}/commits?sha={branch}&per_page=1", token
+    )
+    if not data:
+        raise SystemExit(f"{slug}: no commits on {branch}")
+    sha = data[0]["sha"]
+    date = data[0]["commit"]["committer"]["date"][:10].replace("-", "")
+    return f"r{date}.{sha[:7]}", sha
+
+
+def resolve_upstream_ref(pkg: dict[str, Any], token: str | None) -> tuple[str, str]:
+    """pkgver string and git ref to check out (tag name or full sha)."""
     source = pkg.get("version_from", "release")
     if source == "manual":
         version = str(pkg.get("version", "")).strip()
         if not version:
             raise SystemExit(f"{pkg['id']}: version_from=manual requires version")
-        return version
+        return version, version
     slug = github_slug(pkg["repo"])
-    if source == "release":
-        data = http_json(f"https://api.github.com/repos/{slug}/releases/latest", token)
-        tag = data.get("tag_name") or ""
-        if not tag:
+    if source in ("release", "auto"):
+        data = http_json(
+            f"https://api.github.com/repos/{slug}/releases/latest",
+            token,
+            missing_ok=source == "auto",
+        )
+        if data and data.get("tag_name"):
+            tag = data["tag_name"]
+            return strip_v(tag), commit_sha(slug, tag, token)
+        if source == "release":
             raise SystemExit(f"{pkg['id']}: latest release has no tag_name")
-        return strip_v(tag)
-    if source == "tag":
-        data = http_json(f"https://api.github.com/repos/{slug}/tags?per_page=100", token)
-        if not data:
-            raise SystemExit(f"{pkg['id']}: no tags on {slug}")
-        version = latest_numeric_tag(data)
-        if not version:
+    if source in ("tag", "auto"):
+        tags = http_json(f"https://api.github.com/repos/{slug}/tags?per_page=100", token)
+        version = latest_numeric_tag(tags or [])
+        if version:
+            match = next(
+                t for t in tags if strip_v(t.get("name") or "") == version
+            )
+            sha = (match.get("commit") or {}).get("sha") or commit_sha(slug, match["name"], token)
+            return version, sha
+        if source == "tag":
             raise SystemExit(f"{pkg['id']}: no numeric tags on {slug}")
-        return version
+    if source == "auto":
+        branch = str(pkg.get("git_branch") or default_branch(slug, token))
+        return head_version(slug, branch, token)
     raise SystemExit(f"{pkg['id']}: unknown version_from={source}")
+
+
+def resolve_upstream_version(pkg: dict[str, Any], token: str | None) -> str:
+    return resolve_upstream_ref(pkg, token)[0]
 
 
 def pkgbuild_pkgver(aur: str) -> str | None:
@@ -236,7 +278,9 @@ def artifact_id(pkg: dict[str, Any]) -> str:
     return pkg.get("binary_of") or pkg["id"]
 
 
-def build_row(pkg: dict[str, Any], distro: str, version: str) -> dict[str, str]:
+def build_row(
+    pkg: dict[str, Any], distro: str, version: str, git_ref: str = ""
+) -> dict[str, str]:
     checked_version(version)
     runner = DISTRO_RUNNERS[distro]
     return {
@@ -247,6 +291,7 @@ def build_row(pkg: dict[str, Any], distro: str, version: str) -> dict[str, str]:
         "author": pkg["author"],
         "repo": pkg["repo"],
         "version": version,
+        "git_ref": git_ref,
         "distro": distro,
         "runs_on": runner["runs_on"],
         "container": runner["container"],
@@ -286,8 +331,9 @@ def cmd_resolve(catalog: dict[str, Any], args: argparse.Namespace) -> None:
     for pkg in selected(catalog, args.packages):
         src = compile_pkg(pkg, by_id)
         if src["id"] not in versions:
-            versions[src["id"]] = checked_version(resolve_upstream_version(src, token))
-        version = versions[src["id"]]
+            ver, ref = resolve_upstream_ref(src, token)
+            versions[src["id"]] = (checked_version(ver), ref)
+        version, git_ref = versions[src["id"]]
         # Cron: AUR. Manual/PR: local PKGBUILD (Publish does not commit pkgver).
         current = aur_pkgver(pkg["aur"]) if args.skip_unchanged else pkgbuild_pkgver(pkg["aur"])
         changed = current != version
@@ -299,6 +345,7 @@ def cmd_resolve(catalog: dict[str, Any], args: argparse.Namespace) -> None:
             "aur": pkg["aur"],
             "kind": pkg["kind"],
             "version": version,
+            "git_ref": git_ref,
             "previous": current,
             "changed": changed,
             "release_tag": release_tag(pkg, version),
@@ -313,7 +360,7 @@ def cmd_resolve(catalog: dict[str, Any], args: argparse.Namespace) -> None:
         if src and src["id"] not in built_ids:
             built_ids.add(src["id"])
             for distro in distros_for(src, defaults):
-                build_include.append(build_row(src, distro, version))
+                build_include.append(build_row(src, distro, version, git_ref))
             if src.get("kind") != "bin":
                 release_include.append(
                     {
@@ -321,6 +368,7 @@ def cmd_resolve(catalog: dict[str, Any], args: argparse.Namespace) -> None:
                         "aur": src["aur"],
                         "kind": src["kind"],
                         "version": version,
+                        "git_ref": git_ref,
                         "release_tag": release_tag(src, version),
                     }
                 )
@@ -375,7 +423,8 @@ def cmd_matrix(catalog: dict[str, Any], args: argparse.Namespace) -> None:
     skipped: list[str] = []
     for pkg in selected(catalog, args.packages):
         by_id = {p["id"]: p for p in catalog["packages"]}
-        version = checked_version(resolve_upstream_version(compile_pkg(pkg, by_id), token))
+        version, git_ref = resolve_upstream_ref(compile_pkg(pkg, by_id), token)
+        version = checked_version(version)
         current = aur_pkgver(pkg["aur"]) if args.skip_unchanged else pkgbuild_pkgver(pkg["aur"])
         if not force and current == version and args.skip_unchanged:
             skipped.append(f"{pkg['id']} already {version}")
@@ -386,6 +435,7 @@ def cmd_matrix(catalog: dict[str, Any], args: argparse.Namespace) -> None:
                 "aur": pkg["aur"],
                 "kind": pkg["kind"],
                 "version": version,
+                "git_ref": git_ref,
                 "release_tag": release_tag(pkg, version),
                 "arch_tarball": tarball_name(pkg, version, "arch" if pkg["kind"] != "script" else "any"),
             }
@@ -417,16 +467,19 @@ def cmd_matrix_build(catalog: dict[str, Any], args: argparse.Namespace) -> None:
         seen.add(src["id"])
         # Explicit --version / --versions skip GitHub. Otherwise PKGBUILD, then upstream.
         version = pinned.get(src["id"], pinned.get(pkg["id"], args.version))
+        git_ref = ""
         if version:
             pass
         elif args.from_pkgbuild:
-            version = pkgbuild_pkgver(src["aur"]) or resolve_upstream_version(src, token)
+            version = pkgbuild_pkgver(src["aur"])
+            if not version:
+                version, git_ref = resolve_upstream_ref(src, token)
         else:
-            version = args.version or resolve_upstream_version(src, token)
+            version, git_ref = resolve_upstream_ref(src, token)
         for distro in distros_for(src, defaults):
             if args.distro and distro not in (args.distro, "any"):
                 continue
-            include.append(build_row(src, distro, version))
+            include.append(build_row(src, distro, version, git_ref))
     payload = {"include": include} if include else {"include": []}
     if args.github_output:
         write_output(has_packages=str(bool(include)).lower(), matrix=json.dumps(payload))
