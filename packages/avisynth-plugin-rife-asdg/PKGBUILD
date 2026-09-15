@@ -11,7 +11,7 @@ arch=('x86_64')
 url='https://github.com/Asd-g/AviSynthPlus-RIFE'
 license=('MIT')
 depends=('avisynthplus' 'vulkan-icd-loader' 'gcc-libs' 'glibc')
-makedepends=('cmake' 'ninja' 'git' 'vulkan-headers' 'glslang')
+makedepends=('cmake' 'ninja' 'git' 'vulkan-headers' 'vulkan-icd-loader' 'glslang')
 conflicts=('avisynth-plugin-rife-asdg-bin')
 source=("git+https://github.com/Asd-g/AviSynthPlus-RIFE.git#tag=${pkgver}")
 sha256sums=('SKIP')

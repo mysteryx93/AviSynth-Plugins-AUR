@@ -61,6 +61,8 @@ INSTALL_HINT=$(json_get install_hint)
 BUILD=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("build") or "")' <<<"$META")
 # ubuntu22.04 → catalog key ubuntu
 mapfile -t BUILD_DEPS < <(python3 -c 'import json,sys; [print(dep) for dep in json.load(sys.stdin).get("makedepends", {}).get(sys.argv[1], [])]' "${DISTRO%%22.04}" <<<"$META")
+# Arch names. CMake often needs the runtime .so (e.g. libvulkan) at configure time.
+mapfile -t RUN_DEPS < <(python3 -c 'import json,sys; [print(dep) for dep in json.load(sys.stdin).get("depends") or []]' <<<"$META")
 COLLECT=$(python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("collect") or []))' <<<"$META")
 FILES=$(python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("files") or []))' <<<"$META")
 
@@ -107,7 +109,7 @@ PY
 
 setup_arch() {
   pacman -S --noconfirm --needed \
-    base-devel git python-pip cmake pkgconf zstd "${BUILD_DEPS[@]}"
+    base-devel git python-pip cmake pkgconf zstd "${BUILD_DEPS[@]}" "${RUN_DEPS[@]}"
 }
 
 setup_ubuntu() {

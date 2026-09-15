@@ -10,17 +10,14 @@ arch=('x86_64')
 url='https://github.com/pinterf/mvtools'
 license=('GPL-2.0-only')
 depends=('avisynthplus' 'fftw')
-makedepends=('cmake' 'pkgconf')
+makedepends=('cmake')
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/pinterf/mvtools/archive/refs/tags/${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
-prepare() {
-    cd "mvtools-${pkgver}"
-    rm -rf Sources/include DePan/include DePanEstimate/include
-}
+# Keep pinterf's vendored AviSynth+ headers (interface v12: AcquireGlobalLock).
+# Arch avisynthplus 3.7.5 is still v11. Runtime checks has_at_least_v12.
 
 build() {
-    export CXXFLAGS="${CXXFLAGS} $(pkg-config --cflags avisynth)"
     cmake -S "mvtools-${pkgver}" -B build \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr

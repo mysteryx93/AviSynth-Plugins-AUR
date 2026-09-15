@@ -18,11 +18,11 @@ packages:
     pkgdesc: "AviSynth+ RIFE frame interpolation (Asd-g, ncnn Vulkan)"
     depends: [avisynthplus, vulkan-icd-loader]
     makedepends:
-      arch: [cmake, ninja, git, vulkan-headers, glslang, avisynthplus]
+      # vulkan-icd-loader: FindVulkan needs libvulkan.so, not only headers.
+      arch: [cmake, ninja, git, vulkan-headers, vulkan-icd-loader, glslang, avisynthplus]
       ubuntu: [ninja-build, git, libvulkan-dev, glslang-dev, pkg-config, g++]
     submodules: true
     needs_avisynth_headers: true
-    needs_vulkan: true
     cmake_min: "3.28"
     build: |
       cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -58,12 +58,11 @@ packages:
     pkgdesc: "AviSynth+ MVTools2 (pinterf) — motion estimation and compensation"
     depends: [avisynthplus, fftw]
     makedepends:
-      arch: [cmake, avisynthplus, fftw]
-      ubuntu: [cmake, g++, pkg-config, libfftw3-dev]
-    needs_avisynth_headers: true
+      arch: [cmake, fftw]
+      ubuntu: [cmake, g++, libfftw3-dev]
+    # Vendored headers are v12; distro avisynthplus 3.7.5 is v11.
+    needs_avisynth_headers: false
     build: |
-      rm -rf Sources/include DePan/include DePanEstimate/include
-      export CXXFLAGS="${CXXFLAGS:-} $(pkg-config --cflags avisynth)"
       cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
       cmake --build build
       DESTDIR="${PWD}/stage" cmake --install build
