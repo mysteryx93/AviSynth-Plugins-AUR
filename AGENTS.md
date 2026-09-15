@@ -48,7 +48,7 @@ Tarball: `{source aur}-{version}-linux-x86_64-{arch|ubuntu22.04|any}.tar.zst`. T
 
 Do not: ship Ubuntu-built AUR `-bin`; publish on push; bundle RIFE models; rename `id` after Publish; generate PKGBUILDs from YAML.
 
-**Build** is the compile-and-test gate (PR/dispatch, artifacts only). **Publish** is Release then AUR. Dispatch does **not** compile unless you tick `compile`; it takes tarballs from the latest successful Build on the branch, or `build_run_id`. Monday cron always compiles. AUR `makepkg --test` is skipped for `kind: source` (that would compile a third time). Cron compares AUR `pkgver`; this repo’s PKGBUILDs are not updated by Publish — bump `pkgrel` for same-version recipe changes.
+**Build** is the compile-and-test gate (PR/dispatch, artifacts only — never a Release). **Publish** is optional Release then AUR. Dispatch does **not** compile unless you tick `compile`; it takes tarballs from the latest successful Build on the branch, or `build_run_id`. Dispatch defaults to a **draft** Release and skips AUR (`-bin` cannot fetch draft assets). Uncheck `draft` to publish the Release and push AUR. Uncheck `create_release` for AUR-only (source/script). Monday cron always compiles, publishes the Release, and pushes AUR. AUR `makepkg --test` is skipped for `kind: source` (that would compile a third time). Cron compares AUR `pkgver`; this repo’s PKGBUILDs are not updated by Publish — bump `pkgrel` for same-version recipe changes.
 
 Secrets: `AUR_SSH_PRIVATE_KEY`, optional `AUR_USERNAME` / `AUR_EMAIL` (default `Hanuman` / `mysteryx93@protonmail.com`).
 

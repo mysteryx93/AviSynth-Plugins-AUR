@@ -1,6 +1,7 @@
 name: Publish
-# Dispatch: Release + AUR. Does not compile unless you tick compile (or it is Monday cron).
-# Push to this repo does not publish.
+# Dispatch: optional Release (draft by default) then AUR. Tick draft off to publish.
+# Monday cron: published Release + AUR. Does not compile unless you tick compile (or cron).
+# Build never creates a Release. Push to this repo does not publish.
 
 on:
   workflow_dispatch:
@@ -30,6 +31,16 @@ on:
         required: false
         default: ""
         type: string
+      create_release:
+        description: Create or update a GitHub Release from the tarballs
+        required: false
+        default: true
+        type: boolean
+      draft:
+        description: Draft Release (testing). Off = publish the Release. Draft skips AUR. Cron always publishes.
+        required: false
+        default: true
+        type: boolean
   schedule:
     - cron: "17 6 * * 1"
 
@@ -46,6 +57,8 @@ jobs:
       has_packages: ${{ steps.meta.outputs.has_packages }}
       has_builds: ${{ steps.meta.outputs.has_builds }}
       compile: ${{ steps.flags.outputs.compile }}
+      create_release: ${{ steps.flags.outputs.create_release }}
+      draft: ${{ steps.flags.outputs.draft }}
       build_matrix: ${{ steps.meta.outputs.build_matrix }}
       release_matrix: ${{ steps.meta.outputs.release_matrix }}
       aur_matrix: ${{ steps.meta.outputs.aur_matrix }}
@@ -73,11 +86,24 @@ jobs:
           python3 -m unittest discover -s tests
           python3 scripts/catalog.py --packages "$PACKAGES" resolve "${extra[@]}" --github-output
       - id: flags
-        run: echo "compile=${{ github.event_name == 'schedule' || github.event.inputs.compile == 'true' }}" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          if [[ '${{ github.event_name }}' == 'schedule' ]]; then
+            echo "compile=true" >> "$GITHUB_OUTPUT"
+            echo "create_release=true" >> "$GITHUB_OUTPUT"
+            echo "draft=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "compile=${{ github.event.inputs.compile == 'true' }}" >> "$GITHUB_OUTPUT"
+            echo "create_release=${{ github.event.inputs.create_release != 'false' }}" >> "$GITHUB_OUTPUT"
+            echo "draft=${{ github.event.inputs.draft != 'false' }}" >> "$GITHUB_OUTPUT"
+          fi
 
   build:
     needs: prepare
-    if: needs.prepare.outputs.has_builds == 'true' && needs.prepare.outputs.compile == 'true'
+    if: >-
+      needs.prepare.outputs.has_builds == 'true'
+      && needs.prepare.outputs.compile == 'true'
+      && needs.prepare.outputs.create_release == 'true'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
@@ -110,7 +136,10 @@ jobs:
 
   find-build:
     needs: prepare
-    if: needs.prepare.outputs.has_builds == 'true' && needs.prepare.outputs.compile != 'true'
+    if: >-
+      needs.prepare.outputs.has_builds == 'true'
+      && needs.prepare.outputs.compile != 'true'
+      && needs.prepare.outputs.create_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -142,7 +171,10 @@ jobs:
 
   reuse:
     needs: [prepare, find-build]
-    if: needs.prepare.outputs.has_builds == 'true' && needs.prepare.outputs.compile != 'true'
+    if: >-
+      needs.prepare.outputs.has_builds == 'true'
+      && needs.prepare.outputs.compile != 'true'
+      && needs.prepare.outputs.create_release == 'true'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
@@ -178,6 +210,7 @@ jobs:
     needs: [prepare, build, reuse]
     if: >-
       always()
+      && needs.prepare.outputs.create_release == 'true'
       && needs.prepare.outputs.has_builds == 'true'
       && (needs.build.result == 'success' || needs.reuse.result == 'success')
     strategy:
@@ -200,16 +233,24 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ matrix.release_tag }}
           TITLE: ${{ matrix.aur }} ${{ matrix.version }}
+          DRAFT: ${{ needs.prepare.outputs.draft }}
         run: |
           set -euo pipefail
           shopt -s nullglob
           files=(dist/*.tar.zst)
           (( ${#files[@]} > 0 )) || { echo "::error::No tarballs for ${{ matrix.id }}"; exit 1; }
+          extra=()
+          [[ "$DRAFT" == true ]] && extra+=(--draft)
           if gh release view "$TAG" >/dev/null 2>&1; then
             # Replaces assets under the same tag. Prefer a pkgrel/tarball rename on retry.
             gh release upload "$TAG" "${files[@]}" --clobber
+            # Never turn a published Release back into a draft.
+            if [[ "$DRAFT" != true ]]; then
+              gh release edit "$TAG" --draft=false
+            fi
           else
-            gh release create "$TAG" "${files[@]}" --target '${{ github.sha }}' --title "$TITLE" --notes "Automated build of ${{ matrix.aur }} ${{ matrix.version }}."
+            gh release create "$TAG" "${files[@]}" --target '${{ github.sha }}' --title "$TITLE" \
+              --notes "Automated build of ${{ matrix.aur }} ${{ matrix.version }}." "${extra[@]}"
           fi
 
   # After Release: -bin PKGBUILDs fetch the Arch tarball from that tag.
@@ -218,6 +259,7 @@ jobs:
     needs: [prepare, build, reuse, release]
     if: >-
       always()
+      && needs.prepare.outputs.draft != 'true'
       && needs.prepare.outputs.has_packages == 'true'
       && (needs.build.result == 'success' || needs.build.result == 'skipped')
       && (needs.reuse.result == 'success' || needs.reuse.result == 'skipped')

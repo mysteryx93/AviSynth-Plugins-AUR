@@ -24,7 +24,7 @@ Every compiled plugin has a **source** recipe. `-bin` is optional. A Debian/Fedo
 
 ## Add a plugin
 
-`packages/<aur>/PKGBUILD` + a row in `catalog.yaml`. Procedure: `AGENTS.md`. Open a PR; **Build** produces artifacts. Only the maintainer runs **Publish** (Release, then AUR). Pushing to `main` does not publish.
+`packages/<aur>/PKGBUILD` + a row in `catalog.yaml`. Procedure: `AGENTS.md`. Open a PR; **Build** produces artifacts (no Release). Only the maintainer runs **Publish**. Dispatch defaults to a draft Release and skips AUR; uncheck `draft` to publish. Monday cron publishes. Pushing to `main` does not publish.
 
 ## License
 
