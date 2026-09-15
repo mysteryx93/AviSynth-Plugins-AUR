@@ -1,5 +1,6 @@
 name: Publish
-# Dispatch or Monday cron. Push to this repo does not publish.
+# Dispatch: Release + AUR. Does not compile unless you tick compile (or it is Monday cron).
+# Push to this repo does not publish.
 
 on:
   workflow_dispatch:
@@ -19,6 +20,16 @@ on:
         required: false
         default: false
         type: boolean
+      compile:
+        description: Compile in this run. Off = tarballs from a Build run (test first).
+        required: false
+        default: false
+        type: boolean
+      build_run_id:
+        description: Build run ID to reuse (empty = latest successful Build on this branch)
+        required: false
+        default: ""
+        type: string
   schedule:
     - cron: "17 6 * * 1"
 
@@ -34,6 +45,7 @@ jobs:
     outputs:
       has_packages: ${{ steps.meta.outputs.has_packages }}
       has_builds: ${{ steps.meta.outputs.has_builds }}
+      compile: ${{ steps.flags.outputs.compile }}
       build_matrix: ${{ steps.meta.outputs.build_matrix }}
       release_matrix: ${{ steps.meta.outputs.release_matrix }}
       aur_matrix: ${{ steps.meta.outputs.aur_matrix }}
@@ -60,10 +72,12 @@ jobs:
           fi
           python3 -m unittest discover -s tests
           python3 scripts/catalog.py --packages "$PACKAGES" resolve "${extra[@]}" --github-output
+      - id: flags
+        run: echo "compile=${{ github.event_name == 'schedule' || github.event.inputs.compile == 'true' }}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
-    if: needs.prepare.outputs.has_builds == 'true'
+    if: needs.prepare.outputs.has_builds == 'true' && needs.prepare.outputs.compile == 'true'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
@@ -94,9 +108,78 @@ jobs:
           path: out/*.tar.zst
           if-no-files-found: error
 
+  find-build:
+    needs: prepare
+    if: needs.prepare.outputs.has_builds == 'true' && needs.prepare.outputs.compile != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run_id: ${{ steps.run.outputs.run_id }}
+    steps:
+      - name: Resolve Build run
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUESTED: ${{ github.event.inputs.build_run_id }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${REQUESTED:-}" ]]; then
+            echo "run_id=$REQUESTED" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          id=$(gh run list --workflow Build --branch "$BRANCH" --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId // empty')
+          [[ -n "$id" ]] || {
+            echo "::error::No successful Build on $BRANCH. Run Build first, or tick compile."
+            exit 1
+          }
+          echo "Reusing Build run $id"
+          echo "run_id=$id" >> "$GITHUB_OUTPUT"
+
+  reuse:
+    needs: [prepare, find-build]
+    if: needs.prepare.outputs.has_builds == 'true' && needs.prepare.outputs.compile != 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download artifact from Build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ needs.find-build.outputs.run_id }}
+          NAME: ${{ matrix.id }}-${{ matrix.distro }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          gh run download "$RUN_ID" -n "$NAME" -D out
+          shopt -s nullglob
+          files=(out/*.tar.zst out/**/*.tar.zst)
+          (( ${#files[@]} > 0 )) || {
+            echo "::error::Build run $RUN_ID has no artifact $NAME"
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.id }}-${{ matrix.distro }}
+          path: out/**/*.tar.zst
+          if-no-files-found: error
+
   release:
-    needs: [prepare, build]
-    if: needs.prepare.outputs.has_builds == 'true'
+    needs: [prepare, build, reuse]
+    if: >-
+      always()
+      && needs.prepare.outputs.has_builds == 'true'
+      && (needs.build.result == 'success' || needs.reuse.result == 'success')
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.release_matrix) }}
@@ -130,12 +213,14 @@ jobs:
           fi
 
   # After Release: -bin PKGBUILDs fetch the Arch tarball from that tag.
+  # Source AUR packages are not makepkg-tested here (that recompiles). Test via Build.
   aur:
-    needs: [prepare, build, release]
+    needs: [prepare, build, reuse, release]
     if: >-
       always()
       && needs.prepare.outputs.has_packages == 'true'
       && (needs.build.result == 'success' || needs.build.result == 'skipped')
+      && (needs.reuse.result == 'success' || needs.reuse.result == 'skipped')
       && (needs.release.result == 'success' || needs.release.result == 'skipped')
     strategy:
       fail-fast: false
@@ -151,7 +236,6 @@ jobs:
           PKGREL: ${{ github.event.inputs.pkgrel || '1' }}
         run: |
           set -euo pipefail
-          chmod +x scripts/bump-pkgver.sh
           scripts/bump-pkgver.sh "packages/${{ matrix.aur }}/PKGBUILD" "${{ matrix.version }}" "$PKGREL"
 
       - name: Publish AUR package
@@ -160,7 +244,7 @@ jobs:
           pkgname: ${{ matrix.aur }}
           pkgbuild: ./packages/${{ matrix.aur }}/PKGBUILD
           updpkgsums: true
-          test: true
+          test: ${{ matrix.kind != 'source' }}
           commit_username: ${{ secrets.AUR_USERNAME || 'Hanuman' }}
           commit_email: ${{ secrets.AUR_EMAIL || 'mysteryx93@protonmail.com' }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
