@@ -1,5 +1,6 @@
 # Maintainer: Etienne Charland <mysteryx93 at protonmail dot com>
 # Copy to packages/<aur>/PKGBUILD and fill the fields.
+# Optional. Requires a kind: source sibling and catalog binary_of: <source id>.
 
 pkgname=avisynth-plugin-NAME-AUTHOR-bin
 pkgver=0.0.0

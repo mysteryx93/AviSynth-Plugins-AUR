@@ -42,7 +42,30 @@ def load_catalog() -> dict[str, Any]:
         data = yaml.safe_load(fh)
     if not isinstance(data, dict) or "packages" not in data:
         raise SystemExit(f"Invalid catalog: {CATALOG_PATH}")
+    validate_catalog(data)
     return data
+
+
+def validate_catalog(data: dict[str, Any]) -> None:
+    """-bin is optional. kind=source is required for every compiled plugin."""
+    packages = data["packages"]
+    if not isinstance(packages, list):
+        raise SystemExit("catalog packages must be a list")
+    by_id = {p["id"]: p for p in packages}
+    for pkg in packages:
+        kind = pkg.get("kind")
+        if kind not in ("source", "bin", "script"):
+            raise SystemExit(f"{pkg.get('id')}: unknown kind={kind}")
+        if kind != "bin":
+            continue
+        src_id = pkg.get("binary_of")
+        if not src_id:
+            raise SystemExit(f"{pkg['id']}: kind=bin requires binary_of pointing at a source package")
+        src = by_id.get(src_id)
+        if not src:
+            raise SystemExit(f"{pkg['id']}: binary_of={src_id} not in catalog")
+        if src.get("kind") != "source":
+            raise SystemExit(f"{pkg['id']}: binary_of must be kind=source (got {src.get('kind')})")
 
 
 def parse_ids(raw: str, packages: list[dict[str, Any]]) -> list[str]:
@@ -127,9 +150,28 @@ def pkgbuild_pkgver(aur: str) -> str | None:
 
 
 def distros_for(pkg: dict[str, Any], defaults: dict[str, Any]) -> list[str]:
+    if pkg.get("kind") == "bin":
+        return []
     if pkg.get("kind") == "script":
         return ["any"]
     return list(pkg.get("distros") or defaults.get("distros") or ["arch", "ubuntu22.04"])
+
+
+def compile_pkg(pkg: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    """Bin packages are AUR-only; compile the source sibling instead."""
+    if pkg.get("kind") == "bin":
+        src_id = pkg.get("binary_of")
+        if not src_id:
+            return None
+        src = by_id.get(src_id)
+        if not src:
+            raise SystemExit(f"{pkg['id']}: binary_of={src_id} not in catalog")
+        return src
+    return pkg
+
+
+def artifact_id(pkg: dict[str, Any]) -> str:
+    return pkg.get("binary_of") or pkg["id"]
 
 
 def build_row(pkg: dict[str, Any], distro: str, version: str) -> dict[str, str]:
@@ -156,7 +198,8 @@ def tarball_name(pkg: dict[str, Any], version: str, distro: str) -> str:
     return f"{base}-{version}-linux-x86_64-{distro}.tar.zst"
 
 
-def release_tag(pkg_id: str, version: str) -> str:
+def release_tag(pkg: dict[str, Any] | str, version: str) -> str:
+    pkg_id = pkg if isinstance(pkg, str) else artifact_id(pkg)
     return f"{pkg_id}-v{version}"
 
 
@@ -166,7 +209,10 @@ def cmd_resolve(catalog: dict[str, Any], args: argparse.Namespace) -> None:
     packages_out: list[dict[str, Any]] = []
     build_include: list[dict[str, str]] = []
     aur_include: list[dict[str, str]] = []
+    release_include: list[dict[str, str]] = []
     skipped: list[str] = []
+    built_ids: set[str] = set()
+    by_id = {p["id"]: p for p in catalog["packages"]}
     for pkg in selected(catalog, args.packages):
         version = resolve_upstream_version(pkg, token)
         current = pkgbuild_pkgver(pkg["aur"])
@@ -174,29 +220,45 @@ def cmd_resolve(catalog: dict[str, Any], args: argparse.Namespace) -> None:
         if args.skip_unchanged and not args.force and not changed:
             skipped.append(f"{pkg['id']} already {version}")
             continue
-        packages_out.append(
-            {
-                "id": pkg["id"],
-                "aur": pkg["aur"],
-                "kind": pkg["kind"],
-                "version": version,
-                "previous": current,
-                "changed": changed,
-                "release_tag": release_tag(pkg["id"], version),
-                "arch_tarball": tarball_name(
-                    pkg, version, "any" if pkg["kind"] == "script" else "arch"
-                ),
-            }
-        )
-        aur_include.append(packages_out[-1])
-        for distro in distros_for(pkg, defaults):
-            build_include.append(build_row(pkg, distro, version))
+        row = {
+            "id": pkg["id"],
+            "aur": pkg["aur"],
+            "kind": pkg["kind"],
+            "version": version,
+            "previous": current,
+            "changed": changed,
+            "release_tag": release_tag(pkg, version),
+            "artifact_id": artifact_id(pkg),
+            "arch_tarball": tarball_name(
+                pkg, version, "any" if pkg["kind"] == "script" else "arch"
+            ),
+        }
+        packages_out.append(row)
+        aur_include.append(row)
+        src = compile_pkg(pkg, by_id)
+        if src and src["id"] not in built_ids:
+            built_ids.add(src["id"])
+            for distro in distros_for(src, defaults):
+                build_include.append(build_row(src, distro, version))
+            if src.get("kind") != "bin":
+                release_include.append(
+                    {
+                        "id": src["id"],
+                        "aur": src["aur"],
+                        "kind": src["kind"],
+                        "version": version,
+                        "release_tag": release_tag(src, version),
+                    }
+                )
     build_matrix = {"include": build_include} if build_include else {"include": []}
     aur_matrix = {"include": aur_include} if aur_include else {"include": []}
+    release_matrix = {"include": release_include} if release_include else {"include": []}
     if args.github_output:
         write_output(
-            has_packages=str(bool(packages_out)).lower(),
+            has_packages=str(bool(aur_include)).lower(),
+            has_builds=str(bool(build_include)).lower(),
             build_matrix=json.dumps(build_matrix),
+            release_matrix=json.dumps(release_matrix),
             aur_matrix=json.dumps(aur_matrix),
             skipped="; ".join(skipped),
         )
@@ -205,6 +267,7 @@ def cmd_resolve(catalog: dict[str, Any], args: argparse.Namespace) -> None:
             "packages": packages_out,
             "skipped": skipped,
             "build_matrix": build_matrix,
+            "release_matrix": release_matrix,
             "aur_matrix": aur_matrix,
         },
         sys.stdout,
@@ -243,7 +306,7 @@ def cmd_matrix(catalog: dict[str, Any], args: argparse.Namespace) -> None:
                 "aur": pkg["aur"],
                 "kind": pkg["kind"],
                 "version": version,
-                "release_tag": release_tag(pkg["id"], version),
+                "release_tag": release_tag(pkg, version),
                 "arch_tarball": tarball_name(pkg, version, "arch" if pkg["kind"] != "script" else "any"),
             }
         )
@@ -262,18 +325,26 @@ def cmd_matrix_build(catalog: dict[str, Any], args: argparse.Namespace) -> None:
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     defaults = catalog.get("defaults") or {}
     include: list[dict[str, str]] = []
+    seen: set[str] = set()
+    by_id = {p["id"]: p for p in catalog["packages"]}
     for pkg in selected(catalog, args.packages):
+        src = compile_pkg(pkg, by_id)
+        if src is None:
+            continue
+        if src["id"] in seen:
+            continue
+        seen.add(src["id"])
         if args.from_pkgbuild:
-            version = pkgbuild_pkgver(pkg["aur"]) or resolve_upstream_version(pkg, token)
+            version = pkgbuild_pkgver(src["aur"]) or resolve_upstream_version(src, token)
         else:
-            version = args.version or resolve_upstream_version(pkg, token)
+            version = args.version or resolve_upstream_version(src, token)
         if args.versions:
             pinned = json.loads(args.versions)
-            version = pinned.get(pkg["id"], version)
-        for distro in distros_for(pkg, defaults):
+            version = pinned.get(src["id"], pinned.get(pkg["id"], version))
+        for distro in distros_for(src, defaults):
             if args.distro and distro not in (args.distro, "any"):
                 continue
-            include.append(build_row(pkg, distro, version))
+            include.append(build_row(src, distro, version))
     payload = {"include": include} if include else {"include": []}
     if args.github_output:
         write_output(has_packages=str(bool(include)).lower(), matrix=json.dumps(payload))

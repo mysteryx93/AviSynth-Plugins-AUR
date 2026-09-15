@@ -36,7 +36,9 @@ jobs:
       contents: read
     outputs:
       has_packages: ${{ steps.meta.outputs.has_packages }}
+      has_builds: ${{ steps.meta.outputs.has_builds }}
       build_matrix: ${{ steps.meta.outputs.build_matrix }}
+      release_matrix: ${{ steps.meta.outputs.release_matrix }}
       aur_matrix: ${{ steps.meta.outputs.aur_matrix }}
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +66,7 @@ jobs:
 
   build:
     needs: prepare
-    if: needs.prepare.outputs.has_packages == 'true'
+    if: needs.prepare.outputs.has_builds == 'true'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
@@ -96,18 +98,16 @@ jobs:
           path: out/*.tar.zst
           if-no-files-found: error
 
-  publish:
+  release:
     needs: [prepare, build]
-    if: needs.prepare.outputs.has_packages == 'true'
+    if: needs.prepare.outputs.has_builds == 'true'
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.prepare.outputs.aur_matrix) }}
+      matrix: ${{ fromJSON(needs.prepare.outputs.release_matrix) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -130,6 +130,22 @@ jobs:
           else
             gh release create "$TAG" "${files[@]}" --title "$TITLE" --notes "Automated build of ${{ matrix.aur }} ${{ matrix.version }} (Arch + Ubuntu)."
           fi
+
+  aur:
+    needs: [prepare, build, release]
+    if: >-
+      always()
+      && needs.prepare.outputs.has_packages == 'true'
+      && (needs.build.result == 'success' || needs.build.result == 'skipped')
+      && (needs.release.result == 'success' || needs.release.result == 'skipped')
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.aur_matrix) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Bump PKGBUILD version
         env:

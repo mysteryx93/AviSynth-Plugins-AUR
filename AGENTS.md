@@ -20,9 +20,11 @@ Matrix helper: `scripts/catalog.py`
 
 | `kind` | AUR | GitHub Release | When |
 |---|---|---|---|
-| `source` | User compiles | Arch + Ubuntu tarballs still attached | Small CMake/Make plugins |
-| `bin` | `-bin` PKGBUILD fetches the **Arch** tarball from our Release | Arch + Ubuntu tarballs | Heavy/ML (RIFE / ncnn / CUDA) |
+| `source` | User compiles — **required** for every compiled plugin | Arch + Ubuntu tarballs | Default. This is what Debian/Fedora would port. |
+| `bin` | `-bin` fetches the **Arch** tarball from the source sibling’s Release | not compiled again | Optional extra for heavy builds (`binary_of: <source id>`) |
 | `script` | Copy files | One `any` tarball | AVSI / Python only |
+
+Never add `kind: bin` without a `kind: source` sibling. CI compiles the source id only.
 
 ## Naming
 
@@ -47,6 +49,7 @@ Never invent `conflicts`/`provides` against an existing AUR package unless the h
 3. Copy `templates/<kind>.PKGBUILD` → `packages/<aur>/PKGBUILD`. Fill `pkgname`, `pkgdesc`, `url`, `license`, `depends`, `source`, `package()`.
 4. Append the catalog entry. Include `build` + `collect` (compiled) or `files` (script). The matrix picks it up; **do not** add a new workflow.
 5. Dual-host plugins (AviSynth + VapourSynth, e.g. FrameRateConverter later) = **two** catalog ids and **two** PKGBUILDs, same `repo`.
+5b. Heavy plugins (RIFE): source package **and** `-bin` with `binary_of: <source id>`. Two PKGBUILDs, one compile.
 6. Test:
    - `python3 scripts/catalog.py --packages <id> matrix-build --from-pkgbuild`
    - `scripts/build-package.sh <id> ubuntu22.04 <version>` locally if you can
@@ -69,7 +72,7 @@ Do **not** put third-party sources into this git tree. CI clones upstream at a t
 {aur without -bin}-{version}-linux-x86_64-{arch|ubuntu22.04|any}.tar.zst
 ```
 
-GitHub Release tag: `{id}-v{version}` (example `rife-asdg-v1.4.1`).
+GitHub Release tag: `{source id}-v{version}` (example `rife-asdg-v1.4.1`). `-bin` uses the same tag via `binary_of`.
 
 AUR `-bin` `source=` must point at the **Arch** tarball of that tag.
 
@@ -83,6 +86,6 @@ AUR `-bin` `source=` must point at the **Arch** tarball of that tag.
 
 ## First packages (already in tree)
 
-- `rife-asdg` → `avisynth-plugin-rife-asdg-bin`
+- `rife-asdg` → `avisynth-plugin-rife-asdg` (source) + `rife-asdg-bin` → `avisynth-plugin-rife-asdg-bin`
 - `mvtools2-pinterf` → `avisynth-plugin-mvtools2-pinterf`
 - `xclean-avs` → `avisynth-plugin-xclean` (AviSynth only; VS is already on the AUR as `vapoursynth-plugin-xclean-git`)

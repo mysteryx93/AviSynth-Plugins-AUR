@@ -13,6 +13,7 @@ provides=('avisynth-plugin-rife-asdg')
 conflicts=('avisynth-plugin-rife-asdg')
 options=('!strip')
 _tarball="avisynth-plugin-rife-asdg-${pkgver}-linux-x86_64-arch.tar.zst"
+# Tarball is produced by the rife-asdg source build, tagged rife-asdg-v$pkgver.
 source=("${_tarball}::https://github.com/mysteryx93/AviSynth-Plugins-AUR/releases/download/rife-asdg-v${pkgver}/${_tarball}")
 sha256sums=('SKIP')
 

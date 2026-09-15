@@ -14,9 +14,12 @@ Maintainer AUR account: **Hanuman**.
 
 | Catalog id | AUR name | Kind | Upstream |
 |---|---|---|---|
-| `rife-asdg` | `avisynth-plugin-rife-asdg-bin` | prebuilt binary | [Asd-g/AviSynthPlus-RIFE](https://github.com/Asd-g/AviSynthPlus-RIFE) |
+| `rife-asdg` | `avisynth-plugin-rife-asdg` | source (the recipe) | [Asd-g/AviSynthPlus-RIFE](https://github.com/Asd-g/AviSynthPlus-RIFE) |
+| `rife-asdg-bin` | `avisynth-plugin-rife-asdg-bin` | prebuilt Arch binary | same |
 | `mvtools2-pinterf` | `avisynth-plugin-mvtools2-pinterf` | source | [pinterf/mvtools](https://github.com/pinterf/mvtools) |
 | `xclean-avs` | `avisynth-plugin-xclean` | AVSI script | [mysteryx93/xClean](https://github.com/mysteryx93/xClean) |
+
+Every compiled plugin has a **source** package. `-bin` is optional Arch convenience (RIFE’s ncnn/Vulkan build is slow). Debian/Fedora porters should use the source `PKGBUILD` + catalog entry — see [docs/PORTING.md](docs/PORTING.md).
 
 Names include the **author/fork** when more than one implementation exists. pinterf’s MVTools2 is not classic Fizick MVTools and is not `vapoursynth-plugin-mvtools`. This repo does **not** `provides`/`conflicts` those other packages.
 
@@ -26,7 +29,7 @@ Arch (AUR):
 
 ```bash
 yay -S avisynth-plugin-mvtools2-pinterf
-yay -S avisynth-plugin-rife-asdg-bin
+yay -S avisynth-plugin-rife-asdg-bin   # or avisynth-plugin-rife-asdg to compile locally
 yay -S avisynth-plugin-xclean
 ```
 
@@ -44,7 +47,7 @@ RIFE models are **not** in the plugin package. Pass `model_path` or wait for `av
 
 - Put the author/fork slug in the name when implementations differ.
 - `aur` in `catalog.yaml` is explicit. It is never generated from `author`.
-- `-bin` only when the AUR package installs a CI-built binary (RIFE). Small plugins stay source on the AUR even if Releases still ship tarballs.
+- `-bin` is additive. The source package always exists so the recipe can be rebuilt (AUR, or a future Debian/Fedora repo).
 
 ## Propose a new package
 

@@ -1,5 +1,6 @@
 # Maintainer: Etienne Charland <mysteryx93 at protonmail dot com>
 # Copy to packages/<aur>/PKGBUILD and fill the fields.
+# Every compiled plugin needs this source package, even if a -bin also exists.
 
 pkgname=avisynth-plugin-NAME-AUTHOR
 pkgver=0.0.0

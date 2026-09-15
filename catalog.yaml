@@ -6,15 +6,17 @@ defaults:
   github_repo: mysteryx93/AviSynth-Plugins-AUR
 
 packages:
+  # Source PKGBUILD is the portable recipe (AUR, and a starting point for Debian/Fedora).
+  # -bin is an Arch convenience; it never replaces the source package.
   - id: rife-asdg
-    aur: avisynth-plugin-rife-asdg-bin
-    kind: bin
+    aur: avisynth-plugin-rife-asdg
+    kind: source
     host: avisynth
     author: asdg
     repo: https://github.com/Asd-g/AviSynthPlus-RIFE
     license: MIT
     version_from: release
-    pkgdesc: "AviSynth+ RIFE frame interpolation (Asd-g, ncnn Vulkan) — prebuilt"
+    pkgdesc: "AviSynth+ RIFE frame interpolation (Asd-g, ncnn Vulkan)"
     depends: [avisynthplus, vulkan-icd-loader]
     makedepends:
       arch: [cmake, ninja, git, vulkan-headers, glslang, avisynthplus]
@@ -30,6 +32,18 @@ packages:
       - glob: build/librife*.so
         dest_dir: usr/lib/avisynth
     install_hint: Copy the .so into /usr/lib/avisynth/ (AviSynth+ autoload). Models are not included; pass model_path or install avisynth-plugin-rife-asdg-models when it exists.
+
+  - id: rife-asdg-bin
+    aur: avisynth-plugin-rife-asdg-bin
+    kind: bin
+    binary_of: rife-asdg
+    host: avisynth
+    author: asdg
+    repo: https://github.com/Asd-g/AviSynthPlus-RIFE
+    license: MIT
+    version_from: release
+    pkgdesc: "AviSynth+ RIFE frame interpolation (Asd-g, ncnn Vulkan) — prebuilt"
+    depends: [avisynthplus, vulkan-icd-loader]
 
   - id: mvtools2-pinterf
     aur: avisynth-plugin-mvtools2-pinterf
