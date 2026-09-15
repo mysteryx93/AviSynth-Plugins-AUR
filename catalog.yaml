@@ -25,8 +25,16 @@ packages:
     needs_avisynth_headers: true
     cmake_min: "3.28"
     build: |
-      cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-      cmake --build build
+      # Ubuntu GHA ~7GB OOMs on ncnn *avx512.cpp at full ninja -j. Arch CI already
+      # succeeded with AVX512. RIFE inference is Vulkan; AVX512 is CPU fallback.
+      extra=()
+      jobs=()
+      if [[ "${DISTRO:-}" == ubuntu22.04 ]]; then
+        extra=(-DNCNN_AVX512=OFF -DNCNN_AVX512VNNI=OFF -DNCNN_AVX512BF16=OFF -DNCNN_AVX512FP16=OFF)
+        jobs=(--parallel 2)
+      fi
+      cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${extra[@]}"
+      cmake --build build "${jobs[@]}"
     collect:
       - glob: build/librife*.so
         dest_dir: usr/lib/avisynth

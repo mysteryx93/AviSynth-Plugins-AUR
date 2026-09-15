@@ -167,6 +167,7 @@ clone_upstream
 if [[ "$KIND" != "script" && -n "$BUILD" ]]; then
   (
     cd "$SRC"
+    export DISTRO
     # shellcheck disable=SC2086
     bash -euo pipefail -c "$BUILD"
   )
