@@ -1,8 +1,5 @@
 name: Publish
-
-# Build Arch + Ubuntu tarballs, attach them to a GitHub Release, and push the
-# AUR package. Manual dispatch or weekly upstream-tag check.
-# Pushing to this repo does not publish.
+# Dispatch or Monday cron. Push to this repo does not publish.
 
 on:
   workflow_dispatch:
@@ -126,11 +123,13 @@ jobs:
           files=(dist/*.tar.zst)
           (( ${#files[@]} > 0 )) || { echo "::error::No tarballs for ${{ matrix.id }}"; exit 1; }
           if gh release view "$TAG" >/dev/null 2>&1; then
+            # Replaces assets under the same tag. Prefer a pkgrel/tarball rename on retry.
             gh release upload "$TAG" "${files[@]}" --clobber
           else
             gh release create "$TAG" "${files[@]}" --target '${{ github.sha }}' --title "$TITLE" --notes "Automated build of ${{ matrix.aur }} ${{ matrix.version }}."
           fi
 
+  # After Release: -bin PKGBUILDs fetch the Arch tarball from that tag.
   aur:
     needs: [prepare, build, release]
     if: >-

@@ -1,8 +1,5 @@
 name: Build
-
-# Compile (or pack) catalog packages for Arch and Ubuntu. Artifacts only — no
-# GitHub Release and no AUR push. This is the test path for PRs and for adding
-# a package.
+# Artifacts only. Does not create a Release or push to the AUR.
 
 on:
   pull_request:

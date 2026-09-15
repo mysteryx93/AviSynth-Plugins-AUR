@@ -19,7 +19,7 @@ VERSION=$3
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 OUT="$ROOT/out"
-# Bootstrap the catalog reader before reading package-specific dependencies.
+# Fresh images have no PyYAML; catalog.py needs it before the rest of the deps.
 if [[ "$DISTRO" == arch ]]; then
   pacman -Syu --noconfirm --needed python python-yaml
 else
@@ -40,6 +40,7 @@ print("" if v is None else v if not isinstance(v, (dict, list)) else json.dumps(
 }
 
 KIND=$(json_get kind)
+# -bin is packed from the source sibling's Arch tarball, not compiled here.
 [[ "$KIND" != bin ]] || { echo "Build the binary_of source package instead" >&2; exit 1; }
 if [[ "$KIND" == script ]]; then
   [[ "$DISTRO" == any ]] || usage
@@ -58,6 +59,7 @@ NEEDS_AVS=$(json_get needs_avisynth_headers)
 CMAKE_MIN=$(json_get cmake_min)
 INSTALL_HINT=$(json_get install_hint)
 BUILD=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("build") or "")' <<<"$META")
+# ubuntu22.04 → catalog key ubuntu
 mapfile -t BUILD_DEPS < <(python3 -c 'import json,sys; [print(dep) for dep in json.load(sys.stdin).get("makedepends", {}).get(sys.argv[1], [])]' "${DISTRO%%22.04}" <<<"$META")
 COLLECT=$(python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("collect") or []))' <<<"$META")
 FILES=$(python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("files") or []))' <<<"$META")
@@ -77,6 +79,7 @@ install_avisynth_headers() {
   echo "Installing AviSynth+ headers (HEADERS_ONLY)"
   local avs="$WORK/AviSynthPlus"
   git clone --depth 1 https://github.com/AviSynth/AviSynthPlus.git "$avs"
+  # Ubuntu has no avisynthplus package; headers-only is enough to compile plugins.
   cmake -S "$avs" -B "$avs/build" -DHEADERS_ONLY:BOOL=ON -DCMAKE_BUILD_TYPE=Release
   if (( EUID == 0 )); then
     cmake --install "$avs/build"
@@ -132,6 +135,7 @@ clone_upstream() {
   if [[ "$KIND" == "script" ]] && [[ "$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("version_from"))' <<<"$META")" == "manual" ]]; then
     git clone "${extra[@]}" "$REPO" "$SRC"
     local commit
+    # Same pin as the PKGBUILD; catalog version alone is not a git ref.
     commit=$(sed -n "s/^_commit='\([a-f0-9]*\)'$/\1/p" "$ROOT/packages/$AUR/PKGBUILD")
     [[ "$commit" =~ ^[a-f0-9]{40}$ ]] || { echo "Manual scripts require a pinned _commit in PKGBUILD" >&2; exit 1; }
     git -C "$SRC" checkout --detach "$commit"

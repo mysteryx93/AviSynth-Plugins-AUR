@@ -5,9 +5,8 @@ defaults:
   distros: [arch, ubuntu22.04]
   github_repo: mysteryx93/AviSynth-Plugins-AUR
 
+# kind: source is required for compiled plugins. kind: bin is optional Arch convenience.
 packages:
-  # Source PKGBUILD is the portable recipe (AUR, and a starting point for Debian/Fedora).
-  # -bin is an Arch convenience; it never replaces the source package.
   - id: rife-asdg
     aur: avisynth-plugin-rife-asdg
     kind: source
@@ -34,7 +33,7 @@ packages:
     files:
       - src: LICENSE
         dest: usr/share/licenses/avisynth-plugin-rife-asdg/LICENSE
-    install_hint: Copy the .so into /usr/lib/avisynth/ (AviSynth+ autoload). Models are not included; pass model_path or install avisynth-plugin-rife-asdg-models when it exists.
+    install_hint: /usr/lib/avisynth/. Models not included.
 
   - id: rife-asdg-bin
     aur: avisynth-plugin-rife-asdg-bin
@@ -71,7 +70,7 @@ packages:
     collect:
       - glob: stage/usr/lib/avisynth/*.so
         dest_dir: usr/lib/avisynth
-    install_hint: Copy the .so files into /usr/lib/avisynth/. On Arch, prefer the AUR source package avisynth-plugin-mvtools2-pinterf.
+    install_hint: /usr/lib/avisynth/.
 
   - id: xclean-avs
     aur: avisynth-plugin-xclean
@@ -87,4 +86,4 @@ packages:
     files:
       - src: xClean.avsi
         dest: usr/lib/avisynth/xClean.avsi
-    install_hint: Copy xClean.avsi into /usr/lib/avisynth/. Runtime plugins (MaskTools2, MVTools2, KNLMeansCL, BM3D, …) are not bundled.
+    install_hint: /usr/lib/avisynth/. Runtime plugins not bundled.

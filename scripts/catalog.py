@@ -48,7 +48,7 @@ def load_catalog() -> dict[str, Any]:
 
 
 def validate_catalog(data: dict[str, Any]) -> None:
-    """-bin is optional. kind=source is required for every compiled plugin."""
+    """kind=bin needs a kind=source sibling. Source is required for compiled plugins."""
     packages = data["packages"]
     if not isinstance(packages, list):
         raise SystemExit("catalog packages must be a list")
@@ -177,6 +177,7 @@ def pkgbuild_pkgver(aur: str) -> str | None:
 
 
 def aur_pkgver(aur: str) -> str | None:
+    """Published AUR pkgver (no epoch/pkgrel). Cron uses this; this git tree may be stale."""
     data = http_json(f"https://aur.archlinux.org/rpc/v5/info?arg[]={aur}", None)
     if data.get("type") == "error":
         raise SystemExit(f"AUR lookup failed: {data.get('error')}")
@@ -186,14 +187,14 @@ def aur_pkgver(aur: str) -> str | None:
 
 def distros_for(pkg: dict[str, Any], defaults: dict[str, Any]) -> list[str]:
     if pkg.get("kind") == "bin":
-        return []
+        return []  # compile the source sibling instead
     if pkg.get("kind") == "script":
         return ["any"]
     return list(pkg.get("distros") or defaults.get("distros") or ["arch", "ubuntu22.04"])
 
 
 def compile_pkg(pkg: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
-    """Bin packages are AUR-only; compile the source sibling instead."""
+    """CI compiles source once; -bin is AUR-only."""
     if pkg.get("kind") == "bin":
         src_id = pkg.get("binary_of")
         if not src_id:
@@ -255,6 +256,7 @@ def cmd_resolve(catalog: dict[str, Any], args: argparse.Namespace) -> None:
         if src["id"] not in versions:
             versions[src["id"]] = checked_version(resolve_upstream_version(src, token))
         version = versions[src["id"]]
+        # Cron: AUR. Manual/PR: local PKGBUILD (Publish does not commit pkgver).
         current = aur_pkgver(pkg["aur"]) if args.skip_unchanged else pkgbuild_pkgver(pkg["aur"])
         changed = current != version
         if args.skip_unchanged and not args.force and not changed:
@@ -376,6 +378,7 @@ def cmd_matrix_build(catalog: dict[str, Any], args: argparse.Namespace) -> None:
         if src["id"] in seen:
             continue
         seen.add(src["id"])
+        # Explicit --version / --versions skip GitHub. Otherwise PKGBUILD, then upstream.
         version = pinned.get(src["id"], pinned.get(pkg["id"], args.version))
         if version:
             pass

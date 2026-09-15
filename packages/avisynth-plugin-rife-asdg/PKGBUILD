@@ -1,6 +1,7 @@
 # Maintainer: Etienne Charland <mysteryx93 at protonmail dot com>
 # Upstream: Asd-g — https://github.com/Asd-g/AviSynthPlus-RIFE
-# This source package is the recipe. avisynth-plugin-rife-asdg-bin is optional.
+# Source recipe. Optional sibling: avisynth-plugin-rife-asdg-bin.
+# Git source: the GitHub tag tarball does not include ncnn / avs_c_api_loader.
 
 pkgname=avisynth-plugin-rife-asdg
 pkgver=1.4.1

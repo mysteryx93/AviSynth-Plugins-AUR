@@ -1,4 +1,4 @@
-"""Offline regression checks for package selection and publication planning."""
+"""Catalog matrix/version logic. Does not compile plugins or run makepkg."""
 import argparse
 import contextlib
 import copy

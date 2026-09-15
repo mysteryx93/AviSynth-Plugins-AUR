@@ -1,5 +1,4 @@
 # Maintainer: Etienne Charland <mysteryx93 at protonmail dot com>
-# Copy to packages/<aur>/PKGBUILD and fill the fields.
 
 pkgname=avisynth-plugin-NAME
 pkgver=0.0.0

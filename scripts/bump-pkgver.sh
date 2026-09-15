@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Used on a disposable Publish checkout. Does not update this git repository.
 set -euo pipefail
 [[ $# -ge 2 && $# -le 3 ]] || { echo "Usage: $0 <PKGBUILD> <version> [pkgrel]" >&2; exit 2; }
 pkgbuild=$1
