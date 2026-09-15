@@ -1,0 +1,153 @@
+name: Publish
+
+# Build Arch + Ubuntu tarballs, attach them to a GitHub Release, and push the
+# AUR package. Manual dispatch or weekly upstream-tag check.
+# Pushing to this repo does not publish.
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: Package ids (all or comma-separated catalog ids)
+        required: false
+        default: all
+        type: string
+      pkgrel:
+        description: AUR pkgrel
+        required: false
+        default: "1"
+        type: string
+      force:
+        description: Publish even if pkgver already matches upstream
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "17 6 * * 1"
+
+concurrency:
+  group: publish-aur-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      has_packages: ${{ steps.meta.outputs.has_packages }}
+      build_matrix: ${{ steps.meta.outputs.build_matrix }}
+      aur_matrix: ${{ steps.meta.outputs.aur_matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML
+        run: pip install pyyaml
+      - name: Resolve versions
+        id: meta
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          packages='${{ github.event.inputs.packages || 'all' }}'
+          extra=()
+          if [[ '${{ github.event_name }}' == 'schedule' ]]; then
+            extra+=(--skip-unchanged)
+          fi
+          if [[ '${{ github.event.inputs.force || false }}' == 'true' ]]; then
+            extra+=(--force)
+          fi
+          python3 scripts/catalog.py --packages "$packages" resolve "${extra[@]}" --github-output
+          python3 scripts/catalog.py --packages "$packages" resolve "${extra[@]}"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.has_packages == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (Arch container)
+        if: matrix.distro == 'arch'
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            archlinux:base-devel \
+            bash -lc "bash scripts/build-package.sh '${{ matrix.id }}' arch '${{ matrix.version }}'"
+
+      - name: Build (Ubuntu / portable)
+        if: matrix.distro != 'arch'
+        run: |
+          set -euo pipefail
+          chmod +x scripts/build-package.sh scripts/catalog.py
+          scripts/build-package.sh '${{ matrix.id }}' '${{ matrix.distro }}' '${{ matrix.version }}'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.id }}-${{ matrix.distro }}
+          path: out/*.tar.zst
+          if-no-files-found: error
+
+  publish:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.has_packages == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.aur_matrix) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ matrix.id }}-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ matrix.release_tag }}
+          TITLE: ${{ matrix.aur }} ${{ matrix.version }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(dist/*.tar.zst)
+          (( ${#files[@]} > 0 )) || { echo "::error::No tarballs for ${{ matrix.id }}"; exit 1; }
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            gh release create "$TAG" "${files[@]}" --title "$TITLE" --notes "Automated build of ${{ matrix.aur }} ${{ matrix.version }} (Arch + Ubuntu)."
+          fi
+
+      - name: Bump PKGBUILD version
+        env:
+          PKGREL: ${{ github.event.inputs.pkgrel || '1' }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/bump-pkgver.sh
+          scripts/bump-pkgver.sh "packages/${{ matrix.aur }}/PKGBUILD" "${{ matrix.version }}" "$PKGREL"
+
+      - name: Publish AUR package
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: ${{ matrix.aur }}
+          pkgbuild: ./packages/${{ matrix.aur }}/PKGBUILD
+          updpkgsums: true
+          test: true
+          commit_username: ${{ secrets.AUR_USERNAME || 'Hanuman' }}
+          commit_email: ${{ secrets.AUR_EMAIL || 'mysteryx93@protonmail.com' }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Update ${{ matrix.aur }} to ${{ matrix.version }}
+          ssh_keyscan_types: rsa,ecdsa,ed25519

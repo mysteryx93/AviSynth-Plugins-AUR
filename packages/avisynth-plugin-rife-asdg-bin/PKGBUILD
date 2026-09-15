@@ -1,0 +1,23 @@
+# Maintainer: Etienne Charland <mysteryx93 at protonmail dot com>
+# Upstream: Asd-g — https://github.com/Asd-g/AviSynthPlus-RIFE
+
+pkgname=avisynth-plugin-rife-asdg-bin
+pkgver=1.4.1
+pkgrel=1
+pkgdesc="AviSynth+ RIFE frame interpolation (Asd-g, ncnn Vulkan) — prebuilt"
+arch=('x86_64')
+url='https://github.com/Asd-g/AviSynthPlus-RIFE'
+license=('MIT')
+depends=('avisynthplus' 'vulkan-icd-loader')
+provides=('avisynth-plugin-rife-asdg')
+conflicts=('avisynth-plugin-rife-asdg')
+options=('!strip')
+_tarball="avisynth-plugin-rife-asdg-${pkgver}-linux-x86_64-arch.tar.zst"
+source=("${_tarball}::https://github.com/mysteryx93/AviSynth-Plugins-AUR/releases/download/rife-asdg-v${pkgver}/${_tarball}")
+sha256sums=('SKIP')
+
+package() {
+    install -dm755 "${pkgdir}/usr/lib/avisynth"
+    find "${srcdir}" -type f -name '*.so' -exec install -Dm755 {} "${pkgdir}/usr/lib/avisynth/" \;
+    install -Dm644 "${srcdir}/install.txt" "${pkgdir}/usr/share/doc/${pkgname}/install.txt"
+}

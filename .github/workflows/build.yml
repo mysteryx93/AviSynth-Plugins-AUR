@@ -1,0 +1,85 @@
+name: Build
+
+# Compile (or pack) catalog packages for Arch and Ubuntu. Artifacts only — no
+# GitHub Release and no AUR push. This is the test path for PRs and for adding
+# a package.
+
+on:
+  pull_request:
+    paths:
+      - catalog.yaml
+      - packages/**
+      - scripts/**
+      - .github/workflows/build.yml
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: Package ids (all or comma-separated catalog ids)
+        required: false
+        default: all
+        type: string
+
+concurrency:
+  group: build-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_packages: ${{ steps.meta.outputs.has_packages }}
+      matrix: ${{ steps.meta.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML
+        run: pip install pyyaml
+      - name: Resolve build matrix
+        id: meta
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          packages='${{ github.event.inputs.packages || 'all' }}'
+          python3 scripts/catalog.py --packages "$packages" matrix-build --from-pkgbuild --github-output
+          echo "Matrix:"
+          python3 scripts/catalog.py --packages "$packages" matrix-build --from-pkgbuild
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.has_packages == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (Arch container)
+        if: matrix.distro == 'arch'
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -v "$PWD":/work -w /work \
+            archlinux:base-devel \
+            bash -lc "bash scripts/build-package.sh '${{ matrix.id }}' arch '${{ matrix.version }}'"
+
+      - name: Build (Ubuntu / portable)
+        if: matrix.distro != 'arch'
+        run: |
+          set -euo pipefail
+          sudo chmod +x scripts/build-package.sh scripts/catalog.py
+          scripts/build-package.sh '${{ matrix.id }}' '${{ matrix.distro }}' '${{ matrix.version }}'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.id }}-${{ matrix.distro }}
+          path: out/*.tar.zst
+          if-no-files-found: error
