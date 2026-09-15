@@ -83,6 +83,8 @@ install_avisynth_headers() {
   git clone --depth 1 https://github.com/AviSynth/AviSynthPlus.git "$avs"
   # Ubuntu has no avisynthplus package; headers-only is enough to compile plugins.
   cmake -S "$avs" -B "$avs/build" -DHEADERS_ONLY:BOOL=ON -DCMAKE_BUILD_TYPE=Release
+  # cmake --install does not run VersionGen; without it version.h is missing.
+  cmake --build "$avs/build" --target VersionGen
   if (( EUID == 0 )); then
     cmake --install "$avs/build"
   else
@@ -167,7 +169,7 @@ files = json.loads(files_raw)
 copied = 0
 for item in collect:
     pattern = os.path.join(src, item["glob"])
-    matches = glob.glob(pattern)
+    matches = glob.glob(pattern, recursive=True)
     if not matches:
         raise SystemExit(f"collect glob matched nothing: {item['glob']}")
     dest_dir = os.path.join(stage, item["dest_dir"])

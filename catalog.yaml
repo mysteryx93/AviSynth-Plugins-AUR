@@ -63,13 +63,29 @@ packages:
     # Vendored headers are v12; distro avisynthplus 3.7.5 is v11.
     needs_avisynth_headers: false
     build: |
-      cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+      # CMAKE_INSTALL_LIBDIR=lib: Ubuntu otherwise uses lib/x86_64-linux-gnu.
+      cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib
       cmake --build build
       DESTDIR="${PWD}/stage" cmake --install build
     collect:
       - glob: stage/usr/lib/avisynth/*.so
         dest_dir: usr/lib/avisynth
+    files:
+      - src: README.md
+        dest: usr/share/doc/avisynth-plugin-mvtools2-pinterf/README.md
     install_hint: /usr/lib/avisynth/.
+
+  - id: mvtools2-pinterf-bin
+    aur: avisynth-plugin-mvtools2-pinterf-bin
+    kind: bin
+    binary_of: mvtools2-pinterf
+    host: avisynth
+    author: pinterf
+    repo: https://github.com/pinterf/mvtools
+    license: GPL-2.0-only
+    version_from: tag
+    pkgdesc: "AviSynth+ MVTools2 (pinterf) — prebuilt"
+    depends: [avisynthplus, fftw]
 
   - id: xclean-avs
     aur: avisynth-plugin-xclean

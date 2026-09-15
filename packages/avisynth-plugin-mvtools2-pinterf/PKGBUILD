@@ -11,6 +11,7 @@ url='https://github.com/pinterf/mvtools'
 license=('GPL-2.0-only')
 depends=('avisynthplus' 'fftw')
 makedepends=('cmake')
+conflicts=('avisynth-plugin-mvtools2-pinterf-bin')
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/pinterf/mvtools/archive/refs/tags/${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
@@ -20,7 +21,8 @@ sha256sums=('SKIP')
 build() {
     cmake -S "mvtools-${pkgver}" -B build \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=/usr
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_LIBDIR=lib
     cmake --build build
 }
 

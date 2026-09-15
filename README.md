@@ -19,7 +19,7 @@ Every compiled plugin has a **source** recipe. `-bin` is optional. A Debian/Fedo
 | Package | Notes |
 |---|---|
 | `avisynth-plugin-rife-asdg` / `-bin` | [Asd-g RIFE](https://github.com/Asd-g/AviSynthPlus-RIFE). Models not included — unpack [the pack](https://github.com/Asd-g/AviSynthPlus-RIFE/releases/tag/models) into `/usr/lib/avisynth/models/` or pass `model_path`. `-bin` is the prebuilt. |
-| `avisynth-plugin-mvtools2-pinterf` | [pinterf branch](https://github.com/pinterf/mvtools). |
+| `avisynth-plugin-mvtools2-pinterf` / `-bin` | [pinterf](https://github.com/pinterf/mvtools). Not Fizick, not VapourSynth mvtools. `-bin` is the prebuilt. |
 | `avisynth-plugin-xclean` | [xClean](https://github.com/mysteryx93/xClean) AVSI. VapourSynth is already `vapoursynth-plugin-xclean-git`. |
 
 ## Add a plugin
