@@ -80,7 +80,18 @@ install_avisynth_headers() {
   fi
   echo "Installing AviSynth+ headers (HEADERS_ONLY)"
   local avs="$WORK/AviSynthPlus"
-  git clone --depth 1 https://github.com/AviSynth/AviSynthPlus.git "$avs"
+  local avs_url="https://github.com/AviSynth/AviSynthPlus.git"
+  # Latest release tag (not master): Version.cmake needs git describe, and a
+  # shallow master clone has no tags. ls-remote so this tracks new AviSynth+ releases.
+  local tag
+  tag=$(git ls-remote --tags --refs "$avs_url" \
+    | awk -F/ '{print $NF}' \
+    | grep -E '^v[0-9]' \
+    | grep -viE 'pre|rc|alpha|beta' \
+    | sort -V | tail -1)
+  [[ -n "$tag" ]] || { echo "Could not resolve an AviSynth+ release tag" >&2; exit 1; }
+  echo "AviSynth+ headers $tag"
+  git clone --depth 1 --branch "$tag" "$avs_url" "$avs"
   # Ubuntu has no avisynthplus package; headers-only is enough to compile plugins.
   cmake -S "$avs" -B "$avs/build" -DHEADERS_ONLY:BOOL=ON -DCMAKE_BUILD_TYPE=Release
   # cmake --install does not run VersionGen; without it version.h is missing.
