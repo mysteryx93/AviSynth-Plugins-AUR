@@ -144,6 +144,29 @@ def checked_version(version: str) -> str:
     return version
 
 
+def tag_sort_key(name: str) -> tuple[tuple[int, int | str], ...] | None:
+    """Numeric pkgver only. Drops pinterf's old r2.7.5.22-style tags (GitHub lists those first)."""
+    version = strip_v(name)
+    if not re.fullmatch(r"[0-9][a-zA-Z0-9._+]*", version):
+        return None
+    parts: list[tuple[int, int | str]] = []
+    for piece in re.split(r"[._+]", version):
+        parts.append((0, int(piece)) if piece.isdigit() else (1, piece))
+    return tuple(parts)
+
+
+def latest_numeric_tag(tags: list[dict[str, Any]]) -> str | None:
+    ranked: list[tuple[tuple[tuple[int, int | str], ...], str]] = []
+    for tag in tags:
+        key = tag_sort_key(tag.get("name") or "")
+        if key is not None:
+            ranked.append((key, strip_v(tag["name"])))
+    if not ranked:
+        return None
+    ranked.sort()
+    return ranked[-1][1]
+
+
 def resolve_upstream_version(pkg: dict[str, Any], token: str | None) -> str:
     source = pkg.get("version_from", "release")
     if source == "manual":
@@ -159,10 +182,13 @@ def resolve_upstream_version(pkg: dict[str, Any], token: str | None) -> str:
             raise SystemExit(f"{pkg['id']}: latest release has no tag_name")
         return strip_v(tag)
     if source == "tag":
-        data = http_json(f"https://api.github.com/repos/{slug}/tags?per_page=20", token)
+        data = http_json(f"https://api.github.com/repos/{slug}/tags?per_page=100", token)
         if not data:
             raise SystemExit(f"{pkg['id']}: no tags on {slug}")
-        return strip_v(data[0]["name"])
+        version = latest_numeric_tag(data)
+        if not version:
+            raise SystemExit(f"{pkg['id']}: no numeric tags on {slug}")
+        return version
     raise SystemExit(f"{pkg['id']}: unknown version_from={source}")
 
 

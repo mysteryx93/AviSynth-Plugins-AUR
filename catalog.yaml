@@ -64,7 +64,9 @@ packages:
     author: pinterf
     repo: https://github.com/pinterf/mvtools
     license: GPL-2.0-only
-    version_from: tag
+    # GitHub default branch is master (2016, no CMake). Tags/releases are on mvtools-pfmod.
+    git_branch: mvtools-pfmod
+    version_from: release
     pkgdesc: "AviSynth+ MVTools2 (pinterf) — motion estimation and compensation"
     depends: [avisynthplus, fftw]
     makedepends:
@@ -89,7 +91,7 @@ packages:
     author: pinterf
     repo: https://github.com/pinterf/mvtools
     license: GPL-2.0-only
-    version_from: tag
+    version_from: release
     pkgdesc: "AviSynth+ MVTools2 (pinterf) — prebuilt"
     depends: [avisynthplus, fftw]
 

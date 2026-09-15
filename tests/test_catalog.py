@@ -75,6 +75,17 @@ class CatalogTests(unittest.TestCase):
         pkg = json.loads(output.getvalue())
         self.assertEqual(pkg["gcc"], str(self.data["defaults"]["gcc"]))
 
+    def test_tag_source_skips_non_numeric_prefix(self):
+        tags = [{"name": "r2.7.5.22"}, {"name": "2.7.46"}, {"name": "2.7.47"}]
+        self.assertEqual(catalog.latest_numeric_tag(tags), "2.7.47")
+        with patch.object(catalog, "http_json", return_value=tags):
+            version = catalog.resolve_upstream_version(
+                {"id": "mvtools2-pinterf", "repo": "https://github.com/pinterf/mvtools",
+                 "version_from": "tag"},
+                None,
+            )
+        self.assertEqual(version, "2.7.47")
+
     def test_unsafe_versions_rejected(self):
         for version in ("1.0'; echo bad", "../1", "1\n2", "1-2"):
             with self.assertRaises(SystemExit):

@@ -171,6 +171,7 @@ install_gcc
 install_avisynth_headers
 
 SRC="$WORK/src/upstream"
+GIT_BRANCH=$(json_get git_branch)
 clone_upstream() {
   local extra=()
   if [[ "$SUBMODULES" == "True" || "$SUBMODULES" == "true" ]]; then
@@ -185,10 +186,23 @@ clone_upstream() {
     git -C "$SRC" checkout --detach "$commit"
     return
   fi
-  if git clone "${extra[@]}" --branch "$VERSION" "$REPO" "$SRC"; then
+  # git_branch is the tree to clone when GitHub's default is not the Linux source.
+  if [[ -n "$GIT_BRANCH" ]]; then
+    git clone "${extra[@]}" --branch "$GIT_BRANCH" "$REPO" "$SRC"
+  else
+    git clone "${extra[@]}" "$REPO" "$SRC"
+  fi
+  git -C "$SRC" fetch --tags --force
+  git -C "$SRC" fetch origin "refs/tags/${VERSION}:refs/tags/${VERSION}" 2>/dev/null || true
+  git -C "$SRC" fetch origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}" 2>/dev/null || true
+  if git -C "$SRC" checkout --detach "$VERSION"; then
     return
   fi
-  git clone "${extra[@]}" --branch "v${VERSION}" "$REPO" "$SRC"
+  if git -C "$SRC" checkout --detach "v${VERSION}"; then
+    return
+  fi
+  echo "No git ref $VERSION (or v$VERSION) in $REPO${GIT_BRANCH:+ (git_branch $GIT_BRANCH)}" >&2
+  exit 1
 }
 
 clone_upstream

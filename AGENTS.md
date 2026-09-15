@@ -42,6 +42,7 @@ Do not vendor upstream. Keep `_commit`, catalog `version`, and `pkgver` in sync 
 - `needs_avisynth_headers: true`
 - `cmake_min` (Ubuntu 22.04; RIFE needs 3.28)
 - `defaults.gcc` (CI compiler on Arch and Ubuntu; 15 = extra/gcc15 + jammy toolchain PPA)
+- `git_branch` — clone this branch, then pin `$VERSION`. Required when GitHub’s default is not the Linux tree (`mvtools-pfmod`, not `master`).
 - `collect[].glob` (into `bin/` unless `dest_dir` is set)
 - `files[]` — `src` in the clone, optional `dest` (default: archive root)
 
