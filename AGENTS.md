@@ -46,7 +46,7 @@ Do not vendor upstream. Keep `_commit`, catalog `version`, and `pkgver` in sync 
 - `collect[].glob` (into `bin/` unless `dest_dir` is set)
 - `files[]` — `src` in the clone, optional `dest` (default: archive root)
 
-Tarball: `bin/` (whatever AviSynth loads: `.so`, `.avsi`, or both), `LICENSE` if present, `install.txt`. Name: `{source aur}-{version}-linux-x86_64-{arch|ubuntu22.04|any}.tar.zst`. Tag: `{source id}-v{version}`. `-bin` copies `bin/` from the **Arch** tarball of that tag.
+Tarball: `bin/` (whatever AviSynth loads: `.so`, `.avsi`, or both), `LICENSE` if present, `install.txt`. Name: `{source aur}-{version}-linux-x86_64-{arch|ubuntu|any}.tar.zst`. Tag: `{source id}-v{version}`. `-bin` copies `bin/` from the **Arch** tarball of that tag.
 
 Do not: ship Ubuntu-built AUR `-bin`; publish on push; bundle RIFE models; rename `id` after Publish; generate PKGBUILDs from YAML.
 

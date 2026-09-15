@@ -10,7 +10,7 @@ AviSynth+ autoloads from `/usr/lib/avisynth/`.
 
 **Arch:** install from the AUR. Prefer `-bin` when it exists; otherwise the source package compiles locally.
 
-**Anywhere else:** [Releases](https://github.com/mysteryx93/AviSynth-Plugins-AUR/releases) — `*-ubuntu22.04.tar.zst` or `*-any.tar.zst`, then follow `install.txt`. Tarballs are 22.04; you still need the plugin’s runtime libraries.
+**Anywhere else:** [Releases](https://github.com/mysteryx93/AviSynth-Plugins-AUR/releases) — `*-ubuntu.tar.zst` or `*-any.tar.zst`, then follow `install.txt`. Ubuntu builds are 22.04 (glibc 2.35); you still need the plugin’s runtime libraries.
 
 Every compiled plugin has a **source** recipe. `-bin` is optional. A Debian/Fedora repo would port source and script packages only — [docs/PORTING.md](docs/PORTING.md).
 

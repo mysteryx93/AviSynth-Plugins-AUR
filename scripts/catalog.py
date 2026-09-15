@@ -254,11 +254,17 @@ def build_row(pkg: dict[str, Any], distro: str, version: str) -> dict[str, str]:
     }
 
 
+def tarball_label(distro: str) -> str:
+    if distro.startswith("ubuntu"):
+        return "ubuntu"
+    return distro
+
+
 def tarball_name(pkg: dict[str, Any], version: str, distro: str) -> str:
     base = pkg["aur"]
     if base.endswith("-bin"):
         base = base[: -len("-bin")]
-    return f"{base}-{version}-linux-x86_64-{distro}.tar.zst"
+    return f"{base}-{version}-linux-x86_64-{tarball_label(distro)}.tar.zst"
 
 
 def release_tag(pkg: dict[str, Any] | str, version: str) -> str:

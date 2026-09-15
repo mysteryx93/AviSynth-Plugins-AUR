@@ -260,18 +260,23 @@ if [[ "$HOST" == "avisynth" ]]; then
 else
   DEFAULT_DIR="/usr/lib/vapoursynth"
 fi
-cat > "$STAGE/install.txt" <<EOF
-Package: $AUR
-Version: $VERSION
-Distro: $DISTRO
-Host: $HOST
+case "$DISTRO" in
+  ubuntu22.04) TARBALL_DISTRO=ubuntu; BASELINE="Built on Ubuntu 22.04 (glibc 2.35)." ;;
+  *) TARBALL_DISTRO=$DISTRO; BASELINE="" ;;
+esac
+{
+  echo "Package: $AUR"
+  echo "Version: $VERSION"
+  echo "Distro: $TARBALL_DISTRO"
+  echo "Host: $HOST"
+  [[ -n "$BASELINE" ]] && echo "$BASELINE"
+  echo
+  echo "$HINT"
+  echo
+  echo "Copy everything in bin/ into: $DEFAULT_DIR"
+} > "$STAGE/install.txt"
 
-$HINT
-
-Copy everything in bin/ into: $DEFAULT_DIR
-EOF
-
-TARBALL="${AUR}-${VERSION}-linux-x86_64-${DISTRO}.tar.zst"
+TARBALL="${AUR}-${VERSION}-linux-x86_64-${TARBALL_DISTRO}.tar.zst"
 
 (
   cd "$STAGE"

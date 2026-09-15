@@ -86,6 +86,14 @@ class CatalogTests(unittest.TestCase):
             )
         self.assertEqual(version, "2.7.47")
 
+    def test_ubuntu_tarball_name_has_no_version(self):
+        pkg = {"aur": "avisynth-plugin-rife-asdg"}
+        self.assertEqual(
+            catalog.tarball_name(pkg, "1.4.1", "ubuntu22.04"),
+            "avisynth-plugin-rife-asdg-1.4.1-linux-x86_64-ubuntu.tar.zst",
+        )
+        self.assertEqual(catalog.tarball_label("arch"), "arch")
+
     def test_unsafe_versions_rejected(self):
         for version in ("1.0'; echo bad", "../1", "1\n2", "1-2"):
             with self.assertRaises(SystemExit):
