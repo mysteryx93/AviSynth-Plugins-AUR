@@ -24,6 +24,8 @@ packages:
     submodules: true
     needs_avisynth_headers: true
     cmake_min: "3.28"
+    # plugin.cpp includes <format>; jammy g++ 11 / libstdc++ 12 do not have it.
+    ubuntu_gcc: "13"
     build: |
       # Ubuntu GHA ~7GB OOMs on ncnn *avx512.cpp at full ninja -j. Arch CI already
       # succeeded with AVX512. RIFE inference is Vulkan; AVX512 is CPU fallback.
@@ -31,6 +33,9 @@ packages:
       jobs=()
       if [[ "${DISTRO:-}" == ubuntu22.04 ]]; then
         extra=(-DNCNN_AVX512=OFF -DNCNN_AVX512VNNI=OFF -DNCNN_AVX512BF16=OFF -DNCNN_AVX512FP16=OFF)
+        extra+=(-DCMAKE_C_COMPILER="${CC:-gcc-13}" -DCMAKE_CXX_COMPILER="${CXX:-g++-13}")
+        # g++-13 needs newer GLIBCXX than stock 22.04; keep the tarball loadable.
+        extra+=(-DCMAKE_SHARED_LINKER_FLAGS=-static-libstdc++)
         jobs=(--parallel 2)
       fi
       cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${extra[@]}"

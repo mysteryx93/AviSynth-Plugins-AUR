@@ -57,6 +57,7 @@ AUR=$(json_get aur)
 SUBMODULES=$(json_get submodules)
 NEEDS_AVS=$(json_get needs_avisynth_headers)
 CMAKE_MIN=$(json_get cmake_min)
+UBUNTU_GCC=$(json_get ubuntu_gcc)
 INSTALL_HINT=$(json_get install_hint)
 BUILD=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("build") or "")' <<<"$META")
 # ubuntu22.04 → catalog key ubuntu
@@ -103,6 +104,21 @@ install_avisynth_headers() {
   fi
 }
 
+install_ubuntu_gcc() {
+  [[ "$DISTRO" == ubuntu22.04 ]] || return 0
+  local ver=${UBUNTU_GCC:-}
+  [[ -n "$ver" ]] || return 0
+  if ! command -v "g++-$ver" >/dev/null; then
+    # jammy repos stop at g++-12; <format> is libstdc++ 13.
+    sudo apt-get install -y --no-install-recommends software-properties-common
+    sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+    sudo apt-get update
+    sudo apt-get install -y --no-install-recommends "gcc-$ver" "g++-$ver"
+  fi
+  export CC="gcc-$ver" CXX="g++-$ver"
+  echo "Using $CXX"
+}
+
 install_cmake_min() {
   local need=${CMAKE_MIN:-}
   [[ -n "$need" ]] || return 0
@@ -139,6 +155,7 @@ case "$DISTRO" in
 esac
 
 install_cmake_min
+install_ubuntu_gcc
 install_avisynth_headers
 
 SRC="$WORK/src/upstream"
@@ -167,7 +184,7 @@ clone_upstream
 if [[ "$KIND" != "script" && -n "$BUILD" ]]; then
   (
     cd "$SRC"
-    export DISTRO
+    export DISTRO CC CXX
     # shellcheck disable=SC2086
     bash -euo pipefail -c "$BUILD"
   )

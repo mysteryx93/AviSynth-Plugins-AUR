@@ -41,6 +41,7 @@ Do not vendor upstream. Keep `_commit`, catalog `version`, and `pkgver` in sync 
 - `submodules: true`
 - `needs_avisynth_headers: true`
 - `cmake_min` (Ubuntu 22.04; RIFE needs 3.28)
+- `ubuntu_gcc` (jammy default g++ 11; RIFE `<format>` needs 13)
 - `collect[].glob` / `dest_dir`
 - `files[]` — `src` in the clone, `dest` in the tarball
 
