@@ -51,9 +51,9 @@ jobs:
         id: meta
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PACKAGES: ${{ github.event.inputs.packages || 'all' }}
         run: |
           set -euo pipefail
-          packages='${{ github.event.inputs.packages || 'all' }}'
           extra=()
           if [[ '${{ github.event_name }}' == 'schedule' ]]; then
             extra+=(--skip-unchanged)
@@ -61,8 +61,8 @@ jobs:
           if [[ '${{ github.event.inputs.force || false }}' == 'true' ]]; then
             extra+=(--force)
           fi
-          python3 scripts/catalog.py --packages "$packages" resolve "${extra[@]}" --github-output
-          python3 scripts/catalog.py --packages "$packages" resolve "${extra[@]}"
+          python3 -m unittest discover -s tests
+          python3 scripts/catalog.py --packages "$PACKAGES" resolve "${extra[@]}" --github-output
 
   build:
     needs: prepare
@@ -89,7 +89,6 @@ jobs:
         if: matrix.distro != 'arch'
         run: |
           set -euo pipefail
-          chmod +x scripts/build-package.sh scripts/catalog.py
           scripts/build-package.sh '${{ matrix.id }}' '${{ matrix.distro }}' '${{ matrix.version }}'
 
       - uses: actions/upload-artifact@v4
@@ -118,6 +117,7 @@ jobs:
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ matrix.release_tag }}
           TITLE: ${{ matrix.aur }} ${{ matrix.version }}
         run: |
@@ -128,7 +128,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${files[@]}" --clobber
           else
-            gh release create "$TAG" "${files[@]}" --title "$TITLE" --notes "Automated build of ${{ matrix.aur }} ${{ matrix.version }} (Arch + Ubuntu)."
+            gh release create "$TAG" "${files[@]}" --target '${{ github.sha }}' --title "$TITLE" --notes "Automated build of ${{ matrix.aur }} ${{ matrix.version }}."
           fi
 
   aur:

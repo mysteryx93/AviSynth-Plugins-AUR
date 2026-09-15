@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -51,7 +52,23 @@ def validate_catalog(data: dict[str, Any]) -> None:
     packages = data["packages"]
     if not isinstance(packages, list):
         raise SystemExit("catalog packages must be a list")
-    by_id = {p["id"]: p for p in packages}
+    by_id = {}
+    names = set()
+    for pkg in packages:
+        if not isinstance(pkg, dict):
+            raise SystemExit("Each package must be a mapping")
+        for field in ("id", "aur"):
+            if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", str(pkg.get(field, ""))):
+                raise SystemExit(f"Invalid package {field}: {pkg.get(field)}")
+        if pkg["id"] in by_id or pkg["aur"] in names:
+            raise SystemExit(f"Duplicate package id or aur: {pkg['id']}")
+        by_id[pkg["id"]] = pkg
+        names.add(pkg["aur"])
+        if pkg.get("host") not in ("avisynth", "vapoursynth"):
+            raise SystemExit(f"{pkg['id']}: invalid host")
+        for distro in distros_for(pkg, data.get("defaults") or {}):
+            if distro not in DISTRO_RUNNERS or (pkg.get("kind") == "source" and distro == "any"):
+                raise SystemExit(f"{pkg['id']}: invalid distro {distro}")
     for pkg in packages:
         kind = pkg.get("kind")
         if kind not in ("source", "bin", "script"):
@@ -66,6 +83,10 @@ def validate_catalog(data: dict[str, Any]) -> None:
             raise SystemExit(f"{pkg['id']}: binary_of={src_id} not in catalog")
         if src.get("kind") != "source":
             raise SystemExit(f"{pkg['id']}: binary_of must be kind=source (got {src.get('kind')})")
+        if pkg["aur"] != src["aur"] + "-bin" or pkg["host"] != src["host"]:
+            raise SystemExit(f"{pkg['id']}: binary name and host must match its source sibling")
+        if "arch" not in distros_for(src, data.get("defaults") or {}):
+            raise SystemExit(f"{pkg['id']}: binary source must build for Arch")
 
 
 def parse_ids(raw: str, packages: list[dict[str, Any]]) -> list[str]:
@@ -105,9 +126,9 @@ def http_json(url: str, token: str | None) -> Any:
         with urlopen(req, timeout=30) as resp:
             return json.load(resp)
     except HTTPError as exc:
-        raise SystemExit(f"GitHub API {url} failed: HTTP {exc.code}") from exc
+        raise SystemExit(f"API {url} failed: HTTP {exc.code}") from exc
     except URLError as exc:
-        raise SystemExit(f"GitHub API {url} failed: {exc.reason}") from exc
+        raise SystemExit(f"API {url} failed: {exc.reason}") from exc
 
 
 def strip_v(tag: str) -> str:
@@ -115,6 +136,12 @@ def strip_v(tag: str) -> str:
     if tag.startswith("v") and len(tag) > 1 and tag[1].isdigit():
         return tag[1:]
     return tag
+
+
+def checked_version(version: str) -> str:
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._+]*", version):
+        raise SystemExit(f"Unsupported pkgver: {version!r}; use an explicit upstream mapping")
+    return version
 
 
 def resolve_upstream_version(pkg: dict[str, Any], token: str | None) -> str:
@@ -149,6 +176,14 @@ def pkgbuild_pkgver(aur: str) -> str | None:
     return None
 
 
+def aur_pkgver(aur: str) -> str | None:
+    data = http_json(f"https://aur.archlinux.org/rpc/v5/info?arg[]={aur}", None)
+    if data.get("type") == "error":
+        raise SystemExit(f"AUR lookup failed: {data.get('error')}")
+    results = data.get("results", [])
+    return results[0]["Version"].split(":")[-1].rsplit("-", 1)[0] if results else None
+
+
 def distros_for(pkg: dict[str, Any], defaults: dict[str, Any]) -> list[str]:
     if pkg.get("kind") == "bin":
         return []
@@ -175,6 +210,7 @@ def artifact_id(pkg: dict[str, Any]) -> str:
 
 
 def build_row(pkg: dict[str, Any], distro: str, version: str) -> dict[str, str]:
+    checked_version(version)
     runner = DISTRO_RUNNERS[distro]
     return {
         "id": pkg["id"],
@@ -213,9 +249,13 @@ def cmd_resolve(catalog: dict[str, Any], args: argparse.Namespace) -> None:
     skipped: list[str] = []
     built_ids: set[str] = set()
     by_id = {p["id"]: p for p in catalog["packages"]}
+    versions = {}
     for pkg in selected(catalog, args.packages):
-        version = resolve_upstream_version(pkg, token)
-        current = pkgbuild_pkgver(pkg["aur"])
+        src = compile_pkg(pkg, by_id)
+        if src["id"] not in versions:
+            versions[src["id"]] = checked_version(resolve_upstream_version(src, token))
+        version = versions[src["id"]]
+        current = aur_pkgver(pkg["aur"]) if args.skip_unchanged else pkgbuild_pkgver(pkg["aur"])
         changed = current != version
         if args.skip_unchanged and not args.force and not changed:
             skipped.append(f"{pkg['id']} already {version}")
@@ -295,8 +335,9 @@ def cmd_matrix(catalog: dict[str, Any], args: argparse.Namespace) -> None:
     include: list[dict[str, str]] = []
     skipped: list[str] = []
     for pkg in selected(catalog, args.packages):
-        version = resolve_upstream_version(pkg, token)
-        current = pkgbuild_pkgver(pkg["aur"])
+        by_id = {p["id"]: p for p in catalog["packages"]}
+        version = checked_version(resolve_upstream_version(compile_pkg(pkg, by_id), token))
+        current = aur_pkgver(pkg["aur"]) if args.skip_unchanged else pkgbuild_pkgver(pkg["aur"])
         if not force and current == version and args.skip_unchanged:
             skipped.append(f"{pkg['id']} already {version}")
             continue
@@ -327,6 +368,7 @@ def cmd_matrix_build(catalog: dict[str, Any], args: argparse.Namespace) -> None:
     include: list[dict[str, str]] = []
     seen: set[str] = set()
     by_id = {p["id"]: p for p in catalog["packages"]}
+    pinned = json.loads(args.versions) if args.versions else {}
     for pkg in selected(catalog, args.packages):
         src = compile_pkg(pkg, by_id)
         if src is None:
@@ -334,13 +376,13 @@ def cmd_matrix_build(catalog: dict[str, Any], args: argparse.Namespace) -> None:
         if src["id"] in seen:
             continue
         seen.add(src["id"])
-        if args.from_pkgbuild:
+        version = pinned.get(src["id"], pinned.get(pkg["id"], args.version))
+        if version:
+            pass
+        elif args.from_pkgbuild:
             version = pkgbuild_pkgver(src["aur"]) or resolve_upstream_version(src, token)
         else:
             version = args.version or resolve_upstream_version(src, token)
-        if args.versions:
-            pinned = json.loads(args.versions)
-            version = pinned.get(src["id"], pinned.get(pkg["id"], version))
         for distro in distros_for(src, defaults):
             if args.distro and distro not in (args.distro, "any"):
                 continue

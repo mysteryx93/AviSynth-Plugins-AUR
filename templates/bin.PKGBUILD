@@ -19,5 +19,6 @@ sha256sums=('SKIP')
 
 package() {
     install -dm755 "${pkgdir}/usr/lib/avisynth"
-    find "${srcdir}" -type f -name '*.so' -exec install -Dm755 {} "${pkgdir}/usr/lib/avisynth/" \;
+    install -m755 "${srcdir}"/usr/lib/avisynth/*.so "${pkgdir}/usr/lib/avisynth/"
+    # Include upstream license files in the release and install them here.
 }

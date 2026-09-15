@@ -33,7 +33,7 @@ yay -S avisynth-plugin-rife-asdg-bin   # or avisynth-plugin-rife-asdg to compile
 yay -S avisynth-plugin-xclean
 ```
 
-Ubuntu / anyone else: download the `*-linux-x86_64-ubuntu22.04.tar.zst` (or `*-any.tar.zst` for scripts) from [Releases](https://github.com/mysteryx93/AviSynth-Plugins-AUR/releases) and copy files into `/usr/lib/avisynth/` (see `install.txt` inside the archive). Ubuntu tarballs are built on **22.04** so they run on 22.04+.
+Ubuntu / anyone else: download the `*-linux-x86_64-ubuntu22.04.tar.zst` (or `*-any.tar.zst` for scripts) from [Releases](https://github.com/mysteryx93/AviSynth-Plugins-AUR/releases) and copy files into `/usr/lib/avisynth/` (see `install.txt` inside the archive). Ubuntu tarballs target **22.04**; compatible host libraries and plugin runtime dependencies are still required on each system.
 
 AviSynth+ autoloads `.so` and `.avsi` from `/usr/lib/avisynth/`.
 
@@ -67,6 +67,24 @@ Do not vendor upstream sources in this git tree. The `PKGBUILD` and CI clone the
 | **Publish** | `workflow_dispatch`, Monday cron | Tarballs → GitHub Release → AUR |
 
 Pushing to `main` does not publish.
+
+The weekly check compares upstream versions with the AUR's published `pkgver`.
+Manual Publish rebuilds the selected packages; publishing does not update this
+repository's PKGBUILDs. Keep their versions current separately so PR builds test
+the intended versions. Increment `pkgrel` when republishing a changed recipe at
+the same upstream version.
+
+## Local validation
+
+```bash
+python3 -m unittest discover -s tests
+python3 scripts/catalog.py matrix-build --from-pkgbuild
+```
+
+Python requires PyYAML. Full builds install system dependencies; run the build
+helper in a disposable Arch container or Ubuntu 22.04 environment. Work directories
+and tarballs remain under `out/` for inspection. Manual script packages use the
+PKGBUILD's pinned `_commit`; update it alongside the catalog version and `pkgver`.
 
 Maintainer secrets: `AUR_SSH_PRIVATE_KEY`, optional `AUR_USERNAME` / `AUR_EMAIL` (default `Hanuman` / `mysteryx93@protonmail.com`). Same names as SynthMultiViewer.
 

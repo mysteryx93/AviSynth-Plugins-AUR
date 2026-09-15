@@ -13,18 +13,19 @@ usage() {
 ID=$1
 DISTRO=$2
 VERSION=$3
+[[ "$ID" =~ ^[a-z0-9][a-z0-9-]*$ ]] || usage
+[[ "$DISTRO" =~ ^(arch|ubuntu22\.04|any)$ ]] || usage
+[[ "$VERSION" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+]*$ ]] || usage
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 OUT="$ROOT/out"
-WORK="$ROOT/out/work-$ID-$DISTRO"
-STAGE="$WORK/stage"
-
-mkdir -p "$OUT"
-rm -rf "$WORK"
-mkdir -p "$STAGE" "$WORK/src"
-
-command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
-python3 -c 'import yaml' 2>/dev/null || pip3 install --user pyyaml
+# Bootstrap the catalog reader before reading package-specific dependencies.
+if [[ "$DISTRO" == arch ]]; then
+  pacman -Syu --noconfirm --needed python python-yaml
+else
+  sudo apt-get update
+  sudo apt-get install -y --no-install-recommends python3 python3-yaml
+fi
 
 META=$(python3 "$ROOT/scripts/catalog.py" get "$ID")
 json_get() {
@@ -39,6 +40,16 @@ print("" if v is None else v if not isinstance(v, (dict, list)) else json.dumps(
 }
 
 KIND=$(json_get kind)
+[[ "$KIND" != bin ]] || { echo "Build the binary_of source package instead" >&2; exit 1; }
+if [[ "$KIND" == script ]]; then
+  [[ "$DISTRO" == any ]] || usage
+else
+  [[ "$DISTRO" != any ]] || usage
+fi
+mkdir -p "$OUT"
+WORK=$(mktemp -d "$OUT/work-$ID-$DISTRO.XXXXXXXX")
+STAGE="$WORK/stage"
+mkdir -p "$STAGE" "$WORK/src"
 REPO=$(json_get repo)
 HOST=$(json_get host)
 AUR=$(json_get aur)
@@ -47,6 +58,7 @@ NEEDS_AVS=$(json_get needs_avisynth_headers)
 CMAKE_MIN=$(json_get cmake_min)
 INSTALL_HINT=$(json_get install_hint)
 BUILD=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("build") or "")' <<<"$META")
+mapfile -t BUILD_DEPS < <(python3 -c 'import json,sys; [print(dep) for dep in json.load(sys.stdin).get("makedepends", {}).get(sys.argv[1], [])]' "${DISTRO%%22.04}" <<<"$META")
 COLLECT=$(python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("collect") or []))' <<<"$META")
 FILES=$(python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("files") or []))' <<<"$META")
 
@@ -66,7 +78,11 @@ install_avisynth_headers() {
   local avs="$WORK/AviSynthPlus"
   git clone --depth 1 https://github.com/AviSynth/AviSynthPlus.git "$avs"
   cmake -S "$avs" -B "$avs/build" -DHEADERS_ONLY:BOOL=ON -DCMAKE_BUILD_TYPE=Release
-  cmake --install "$avs/build"
+  if (( EUID == 0 )); then
+    cmake --install "$avs/build"
+  else
+    sudo cmake --install "$avs/build"
+  fi
 }
 
 install_cmake_min() {
@@ -87,21 +103,14 @@ PY
 }
 
 setup_arch() {
-  pacman -Syu --noconfirm
   pacman -S --noconfirm --needed \
-    base-devel git python python-yaml python-pip cmake ninja pkgconf \
-    vulkan-headers glslang fftw zstd
-  # avisynthplus is in extra
-  pacman -S --noconfirm --needed avisynthplus vulkan-icd-loader || true
+    base-devel git python-pip cmake pkgconf zstd "${BUILD_DEPS[@]}"
 }
 
 setup_ubuntu() {
-  sudo apt-get update
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates git python3 python3-pip python3-yaml python3-venv \
-    build-essential ninja-build pkg-config zstd cmake \
-    libvulkan-dev glslang-dev libfftw3-dev
-  pip3 install --user pyyaml
+    build-essential pkg-config zstd cmake "${BUILD_DEPS[@]}"
   export PATH="$HOME/.local/bin:$PATH"
 }
 
@@ -122,6 +131,10 @@ clone_upstream() {
   fi
   if [[ "$KIND" == "script" ]] && [[ "$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("version_from"))' <<<"$META")" == "manual" ]]; then
     git clone "${extra[@]}" "$REPO" "$SRC"
+    local commit
+    commit=$(sed -n "s/^_commit='\([a-f0-9]*\)'$/\1/p" "$ROOT/packages/$AUR/PKGBUILD")
+    [[ "$commit" =~ ^[a-f0-9]{40}$ ]] || { echo "Manual scripts require a pinned _commit in PKGBUILD" >&2; exit 1; }
+    git -C "$SRC" checkout --detach "$commit"
     return
   fi
   if git clone "${extra[@]}" --branch "$VERSION" "$REPO" "$SRC"; then
@@ -184,12 +197,7 @@ $HINT
 Default plugin directory: $DEFAULT_DIR
 EOF
 
-TARBALL=$(python3 -c 'import json,sys; from pathlib import Path
-sys.path.insert(0, str(Path("'"$ROOT"'")/"scripts"))
-# inline name to avoid importing catalog helpers with yaml on PATH issues
-aur="'"$AUR"'"
-base = aur[:-4] if aur.endswith("-bin") else aur
-print(f"{base}-'"$VERSION"'-linux-x86_64-'"$DISTRO"'.tar.zst")')
+TARBALL="${AUR}-${VERSION}-linux-x86_64-${DISTRO}.tar.zst"
 
 (
   cd "$STAGE"

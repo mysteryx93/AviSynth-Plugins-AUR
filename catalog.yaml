@@ -31,6 +31,9 @@ packages:
     collect:
       - glob: build/librife*.so
         dest_dir: usr/lib/avisynth
+    files:
+      - src: LICENSE
+        dest: usr/share/licenses/avisynth-plugin-rife-asdg/LICENSE
     install_hint: Copy the .so into /usr/lib/avisynth/ (AviSynth+ autoload). Models are not included; pass model_path or install avisynth-plugin-rife-asdg-models when it exists.
 
   - id: rife-asdg-bin

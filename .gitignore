@@ -1,6 +1,12 @@
 /out/
+/.idea/
+/.venv/
+/packages/*/src/
+/packages/*/pkg/
+/packages/*/*.log
 __pycache__/
-*.pyc
+*.py[cod]
+*.pkg.tar.*
 *.tar.zst
 *.tar.gz
 .DS_Store
