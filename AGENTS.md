@@ -31,7 +31,7 @@ Author slug when implementations differ. No `conflicts`/`provides` against an ex
 1. Copy `templates/<kind>.PKGBUILD` → `packages/<aur>/PKGBUILD`.
 2. Catalog row: `id`, `aur`, `kind`, `host`, `author`, `repo`, `license`, `version_from` (`release` / `tag` / `manual` + `version`), plus `build`+`collect` and/or `files`.
 3. Dual-host (AviSynth + VapourSynth) = two ids, two PKGBUILDs. Heavy (RIFE) = source + `-bin`.
-4. `files[]` stages extra paths for any kind. A `-bin` license install must match the source sibling’s `files[].dest`.
+4. `files[]` — `src` in the clone, optional `dest`. `.so` / `.avsi` / `.py` go in `bin/` (the install payload; mixed is fine). `LICENSE` stays at the root. `install.txt` is the readme.
 5. `python3 scripts/catalog.py --packages <id> matrix-build --from-pkgbuild`, then GitHub **Build**. Maintainer **Publish**.
 
 Do not vendor upstream. Keep `_commit`, catalog `version`, and `pkgver` in sync for `version_from: manual`.
@@ -41,11 +41,11 @@ Do not vendor upstream. Keep `_commit`, catalog `version`, and `pkgver` in sync 
 - `submodules: true`
 - `needs_avisynth_headers: true`
 - `cmake_min` (Ubuntu 22.04; RIFE needs 3.28)
-- `ubuntu_gcc` (jammy default g++ 11; RIFE `<format>` needs 13)
-- `collect[].glob` / `dest_dir`
-- `files[]` — `src` in the clone, `dest` in the tarball
+- `defaults.gcc` (CI compiler on Arch and Ubuntu; 15 = extra/gcc15 + jammy toolchain PPA)
+- `collect[].glob` (into `bin/` unless `dest_dir` is set)
+- `files[]` — `src` in the clone, optional `dest` (default: archive root)
 
-Tarball: `{source aur}-{version}-linux-x86_64-{arch|ubuntu22.04|any}.tar.zst`. Tag: `{source id}-v{version}`. `-bin` `source=` is the **Arch** tarball of that tag.
+Tarball: `bin/` (whatever AviSynth loads: `.so`, `.avsi`, or both), `LICENSE` if present, `install.txt`. Name: `{source aur}-{version}-linux-x86_64-{arch|ubuntu22.04|any}.tar.zst`. Tag: `{source id}-v{version}`. `-bin` copies `bin/` from the **Arch** tarball of that tag.
 
 Do not: ship Ubuntu-built AUR `-bin`; publish on push; bundle RIFE models; rename `id` after Publish; generate PKGBUILDs from YAML.
 

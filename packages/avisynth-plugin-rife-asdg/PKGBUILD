@@ -30,5 +30,4 @@ build() {
 
 package() {
     DESTDIR="${pkgdir}" cmake --install build
-    install -Dm644 AviSynthPlus-RIFE/LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 }

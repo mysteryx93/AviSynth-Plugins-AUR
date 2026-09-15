@@ -20,7 +20,5 @@ sha256sums=('SKIP')
 
 package() {
     install -dm755 "${pkgdir}/usr/lib/avisynth"
-    install -m755 "${srcdir}"/usr/lib/avisynth/*.so "${pkgdir}/usr/lib/avisynth/"
-    install -Dm644 "${srcdir}/usr/share/doc/avisynth-plugin-mvtools2-pinterf/README.md" \
-        "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+    cp -a "${srcdir}/bin/." "${pkgdir}/usr/lib/avisynth/"
 }

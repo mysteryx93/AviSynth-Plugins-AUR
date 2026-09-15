@@ -68,6 +68,13 @@ class CatalogTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 catalog.validate_catalog(data)
 
+    def test_get_merges_default_gcc(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            catalog.cmd_get(self.data, argparse.Namespace(id="rife-asdg"))
+        pkg = json.loads(output.getvalue())
+        self.assertEqual(pkg["gcc"], str(self.data["defaults"]["gcc"]))
+
     def test_unsafe_versions_rejected(self):
         for version in ("1.0'; echo bad", "../1", "1\n2", "1-2"):
             with self.assertRaises(SystemExit):

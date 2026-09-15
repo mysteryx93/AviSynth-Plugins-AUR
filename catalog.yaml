@@ -4,6 +4,8 @@ defaults:
   arch: x86_64
   distros: [arch, ubuntu22.04]
   github_repo: mysteryx93/AviSynth-Plugins-AUR
+  # Same major on both: Arch extra gcc15 (core gcc is 16); jammy via toolchain PPA.
+  gcc: "15"
 
 # kind: source is required for compiled plugins. kind: bin is optional Arch convenience.
 packages:
@@ -24,8 +26,6 @@ packages:
     submodules: true
     needs_avisynth_headers: true
     cmake_min: "3.28"
-    # plugin.cpp includes <format>; jammy g++ 11 / libstdc++ 12 do not have it.
-    ubuntu_gcc: "13"
     build: |
       # Ubuntu GHA ~7GB OOMs on ncnn *avx512.cpp at full ninja -j. Arch CI already
       # succeeded with AVX512. RIFE inference is Vulkan; AVX512 is CPU fallback.
@@ -33,8 +33,7 @@ packages:
       jobs=()
       if [[ "${DISTRO:-}" == ubuntu22.04 ]]; then
         extra=(-DNCNN_AVX512=OFF -DNCNN_AVX512VNNI=OFF -DNCNN_AVX512BF16=OFF -DNCNN_AVX512FP16=OFF)
-        extra+=(-DCMAKE_C_COMPILER="${CC:-gcc-13}" -DCMAKE_CXX_COMPILER="${CXX:-g++-13}")
-        # g++-13 needs newer GLIBCXX than stock 22.04; keep the tarball loadable.
+        # <format> needs GLIBCXX newer than stock 22.04; keep the tarball loadable.
         extra+=(-DCMAKE_SHARED_LINKER_FLAGS=-static-libstdc++)
         jobs=(--parallel 2)
       fi
@@ -42,10 +41,8 @@ packages:
       cmake --build build "${jobs[@]}"
     collect:
       - glob: build/librife*.so
-        dest_dir: usr/lib/avisynth
     files:
       - src: LICENSE
-        dest: usr/share/licenses/avisynth-plugin-rife-asdg/LICENSE
     install_hint: /usr/lib/avisynth/. Models not included.
 
   - id: rife-asdg-bin
@@ -82,10 +79,6 @@ packages:
       DESTDIR="${PWD}/stage" cmake --install build
     collect:
       - glob: stage/usr/lib/avisynth/*.so
-        dest_dir: usr/lib/avisynth
-    files:
-      - src: README.md
-        dest: usr/share/doc/avisynth-plugin-mvtools2-pinterf/README.md
     install_hint: /usr/lib/avisynth/.
 
   - id: mvtools2-pinterf-bin
@@ -113,5 +106,5 @@ packages:
     depends: [avisynthplus]
     files:
       - src: xClean.avsi
-        dest: usr/lib/avisynth/xClean.avsi
+      - src: LICENSE
     install_hint: /usr/lib/avisynth/. Runtime plugins not bundled.

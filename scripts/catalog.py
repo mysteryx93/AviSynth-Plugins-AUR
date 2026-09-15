@@ -327,7 +327,12 @@ def cmd_get(catalog: dict[str, Any], args: argparse.Namespace) -> None:
     matches = [p for p in catalog["packages"] if p["id"] == args.id]
     if not matches:
         raise SystemExit(f"Unknown package id: {args.id}")
-    json.dump(matches[0], sys.stdout, indent=2)
+    pkg = dict(matches[0])
+    defaults = catalog.get("defaults") or {}
+    gcc = pkg.get("gcc", defaults.get("gcc"))
+    if gcc is not None and gcc != "":
+        pkg["gcc"] = str(gcc)
+    json.dump(pkg, sys.stdout, indent=2)
     sys.stdout.write("\n")
 
 

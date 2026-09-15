@@ -18,7 +18,5 @@ sha256sums=('SKIP')
 
 package() {
     install -dm755 "${pkgdir}/usr/lib/avisynth"
-    install -m755 "${srcdir}"/usr/lib/avisynth/*.so "${pkgdir}/usr/lib/avisynth/"
-    install -Dm644 "${srcdir}/usr/share/licenses/avisynth-plugin-NAME-AUTHOR/LICENSE" \
-        "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    cp -a "${srcdir}/bin/." "${pkgdir}/usr/lib/avisynth/"
 }

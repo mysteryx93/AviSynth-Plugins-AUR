@@ -57,7 +57,7 @@ AUR=$(json_get aur)
 SUBMODULES=$(json_get submodules)
 NEEDS_AVS=$(json_get needs_avisynth_headers)
 CMAKE_MIN=$(json_get cmake_min)
-UBUNTU_GCC=$(json_get ubuntu_gcc)
+GCC_VER=$(json_get gcc)
 INSTALL_HINT=$(json_get install_hint)
 BUILD=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("build") or "")' <<<"$META")
 # ubuntu22.04 → catalog key ubuntu
@@ -104,17 +104,29 @@ install_avisynth_headers() {
   fi
 }
 
-install_ubuntu_gcc() {
-  [[ "$DISTRO" == ubuntu22.04 ]] || return 0
-  local ver=${UBUNTU_GCC:-}
+install_gcc() {
+  [[ "$KIND" != script ]] || return 0
+  local ver=${GCC_VER:-}
   [[ -n "$ver" ]] || return 0
   if ! command -v "g++-$ver" >/dev/null; then
-    # jammy repos stop at g++-12; <format> is libstdc++ 13.
-    sudo apt-get install -y --no-install-recommends software-properties-common
-    sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-    sudo apt-get update
-    sudo apt-get install -y --no-install-recommends "gcc-$ver" "g++-$ver"
+    case "$DISTRO" in
+      arch)
+        # extra/gcc15; gcc13/14 are AUR and would compile the compiler.
+        pacman -S --noconfirm --needed "gcc${ver}"
+        ;;
+      ubuntu22.04)
+        sudo apt-get install -y --no-install-recommends software-properties-common
+        sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends "gcc-$ver" "g++-$ver"
+        ;;
+      *) return 0 ;;
+    esac
   fi
+  command -v "g++-$ver" >/dev/null || {
+    echo "g++-$ver not installed (catalog defaults.gcc=$ver)" >&2
+    exit 1
+  }
   export CC="gcc-$ver" CXX="g++-$ver"
   echo "Using $CXX"
 }
@@ -155,7 +167,7 @@ case "$DISTRO" in
 esac
 
 install_cmake_min
-install_ubuntu_gcc
+install_gcc
 install_avisynth_headers
 
 SRC="$WORK/src/upstream"
@@ -201,15 +213,26 @@ for item in collect:
     matches = glob.glob(pattern, recursive=True)
     if not matches:
         raise SystemExit(f"collect glob matched nothing: {item['glob']}")
-    dest_dir = os.path.join(stage, item["dest_dir"])
+    # Payload lives in bin/; LICENSE and install.txt stay at the archive root.
+    dest_dir = os.path.join(stage, item.get("dest_dir") or "bin")
     os.makedirs(dest_dir, exist_ok=True)
     for path in matches:
         shutil.copy2(path, os.path.join(dest_dir, os.path.basename(path)))
         copied += 1
+PAYLOAD_EXT = {".so", ".avsi", ".py", ".dll"}
 for item in files:
     src_path = os.path.join(src, item["src"])
-    dest_path = os.path.join(stage, item["dest"])
-    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    name = os.path.basename(item["src"])
+    if item.get("dest"):
+        rel = item["dest"]
+    elif os.path.splitext(name)[1].lower() in PAYLOAD_EXT:
+        rel = os.path.join("bin", name)
+    else:
+        rel = name
+    dest_path = os.path.join(stage, rel)
+    parent = os.path.dirname(dest_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     shutil.copy2(src_path, dest_path)
     copied += 1
 if copied == 0:
@@ -231,7 +254,7 @@ Host: $HOST
 
 $HINT
 
-Default plugin directory: $DEFAULT_DIR
+Copy everything in bin/ into: $DEFAULT_DIR
 EOF
 
 TARBALL="${AUR}-${VERSION}-linux-x86_64-${DISTRO}.tar.zst"
